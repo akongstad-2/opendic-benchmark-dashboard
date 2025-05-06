@@ -1,0 +1,23 @@
+[project]
+name = "opendic-benchmark-dashboard"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "akongstad", email = "kongstad@outlook.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastparquet>=2024.11.0",
+    "pandas>=2.2.3",
+    "plotly>=6.0.1",
+    "streamlit>=1.32.0",
+]
+
+[project.scripts]
+opendic-benchmark-dashboard = "opendic_benchmark_dashboard:main"
+opendic-benchmark-streamlit = "opendic_benchmark_dashboard:run_streamlit_app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

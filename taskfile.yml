@@ -1,0 +1,5 @@
+version: "3"
+
+tasks:
+  run:
+    cmd: uv run python -m streamlit run src/opendic_benchmark_dashboard/streamlit_app.py
