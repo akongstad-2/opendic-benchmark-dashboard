@@ -55,7 +55,6 @@ def create_dashboard(data_dir):
             opendic_batch_dashboard(data_df, selected_db=selected_db)
 
 
-
 def standard_dashboard(data_df, selected_db):
     # Overview dashboard
     # Filter for 'CREATE' commands and average runtimes
@@ -605,25 +604,71 @@ def plot_histo(
     st.plotly_chart(fig, use_container_width=True)
 
 
-def create_tldr_dashboard(category_map: dict[str,str]):
+def create_tldr_dashboard(category_map: dict[str, str]):
     datafiles = []
     for path in category_map.values():
-        path_data_files = [path+f for f in os.listdir(path) if f.endswith(".parquet")]
+        path_data_files = [path + f for f in os.listdir(path) if f.endswith(".parquet")]
         datafiles.extend(path_data_files)
 
-    data_df = pd.concat([pd.read_parquet(data_file, engine="pyarrow") for data_file in datafiles],
-    ignore_index=False,)
+    data_df = pd.concat(
+        [pd.read_parquet(data_file, engine="pyarrow") for data_file in datafiles],
+        ignore_index=False,
+    )
 
-     # Display raw data in expandable section
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
+
+    # Display raw data in expandable section
     with st.expander("View Raw Data (Partial of file size)"):
         st.dataframe(data_df.iloc[::10], use_container_width=True)
 
-
-def plot_experiment_total_runtime():
-
+    plot_experiment_total_runtime(data_df=data_df)
 
 
+def plot_experiment_total_runtime(data_df):
+    """
+    Plots the total runtime for each experiment/database as a horizontal bar chart.
 
+    Args:
+        data_df (pd.DataFrame): Dataframe containing the benchmark data.
+        y_axis_type (str): Type of y-axis scale (Linear or Log).
+    """
+    st.subheader("Total Runtime by Experiment/Database")
+
+    # Calculate average runtime for each unique operation to account for repetitions
+    avg_runtime_df = data_df.groupby(["system_name", "ddl_command", "granularity"], as_index=False).agg(
+        avg_runtime=("query_runtime", "mean")
+    )
+
+    # Sum the average runtimes for each system to get total runtime
+    total_runtime_df = (
+        avg_runtime_df.groupby("system_name", as_index=False)
+        .agg(total_runtime=("avg_runtime", "sum"))
+        .sort_values("total_runtime", ascending=True)
+    )  # Sort for better visualization
+
+    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60).round(2)
+
+    with st.expander("View Total Runtime Data"):
+        st.dataframe(avg_runtime_df, use_container_width=True)
+
+    # Create horizontal bar chart
+    fig = px.bar(
+        total_runtime_df,
+        y="system_name",
+        x="total_runtime",
+        orientation="h",
+        labels={"system_name": "Database/Experiment", "total_runtime": "Total Runtime (hours)"},
+        color="system_name",  # Color bars by system name
+    )
+
+    fig.update_layout(
+        template="plotly_white",
+        showlegend=False,  # No need for legend as y-axis shows the system names
+        margin=dict(l=20, r=20, t=30, b=20),
+        xaxis=dict(title="Total Runtime (hours)"),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
 if __name__ == "__main__":
