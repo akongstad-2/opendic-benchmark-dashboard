@@ -13,7 +13,7 @@ st.write("Visualize and compare benchmark results for different databases")
 
 # Create tabs for switching between different dataset categories
 st.sidebar.header("Dashboard Controls")
-sidebar_category = st.sidebar.radio("Select Dataset Category", options=["Standard", "Opendic", "Opendic(Batch)"])
+sidebar_category = st.sidebar.radio("Select Dataset Category", options=["TLDR", "Standard", "Opendic", "Opendic(Batch)"])
 
 
 def create_dashboard(data_dir):
@@ -21,12 +21,13 @@ def create_dashboard(data_dir):
     database_options = ["overview"] + sorted([os.path.splitext(f)[0] for f in data_files])
 
     # Sidebar for controls
-    selected_db = st.sidebar.selectbox("Select Experiment", options=database_options, index=2 if len(database_options) > 2 else 0)
+    selected_db = st.sidebar.selectbox("Select Experiment", options=database_options, index=0)
 
     # Load data
     if selected_db != "overview":
         data_file = f"{data_dir}{selected_db}.parquet"
         data_df = pd.read_parquet(data_file, engine="pyarrow")
+
     else:
         data_df = pd.concat(
             [pd.read_parquet(f"{data_dir}{db}.parquet", engine="pyarrow") for db in database_options if db != "overview"],
@@ -48,7 +49,11 @@ def create_dashboard(data_dir):
         else:
             opendic_dashboard(data_df, selected_db=selected_db)
     elif sidebar_category == "Opendic(Batch)":
-        opendic_batch_dashboard(data_df, selected_db=selected_db)
+        if selected_db == "overview":
+            opendic_batch_compare_all_dashboard(data_df)
+        else:
+            opendic_batch_dashboard(data_df, selected_db=selected_db)
+
 
 
 def standard_dashboard(data_df, selected_db):
@@ -83,8 +88,12 @@ def standard_dashboard(data_df, selected_db):
     summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
+    plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_summary(
         summary_df,
         ddl_command="ALL",
@@ -93,10 +102,6 @@ def standard_dashboard(data_df, selected_db):
         series_column="ddl_command",
         line_dash="target_object",
     )
-    plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
 
 
 def standard_compare_all_dashboard(data_df):
@@ -134,17 +139,7 @@ def standard_compare_all_dashboard(data_df):
     )
 
     # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
-
-    plot_summary(
-        summary_df,
-        ddl_command="ALL",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="System, Object Type",
-        line_dash="ddl_command",
-    )
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_summary(
         create_summary_df,
@@ -184,6 +179,15 @@ def standard_compare_all_dashboard(data_df):
         legend_title="SHOW: System, Object Type",
         line_dash="target_object",
     )
+    plot_summary(
+        summary_df,
+        ddl_command="ALL",
+        experiment_name="All standard datasystems",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="System, Object Type",
+        line_dash="ddl_command",
+    )
 
 
 def opendic_dashboard(data_df, selected_db):
@@ -219,11 +223,11 @@ def opendic_dashboard(data_df, selected_db):
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
 
     # Plot the summary dataframes
-    plot_summary(summary_df, ddl_command="ALL", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_summary(summary_df, ddl_command="ALL", experiment_name=selected_db, y_axis_type=y_axis_type)
 
 
 def opendic_compare_all_dashboard(data_df):
@@ -341,6 +345,84 @@ def opendic_batch_dashboard(data_df, selected_db: str):
     plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
+
+
+def opendic_batch_compare_all_dashboard(data_df):
+    create_summary_df = (
+        data_df[data_df["ddl_command"] == "CREATE"]
+        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
+        .agg(avg_runtime=("query_runtime", "sum"))
+    )
+    alter_summary_df = (
+        data_df[data_df["ddl_command"] == "ALTER"]
+        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    comment_summary_df = (
+        data_df[data_df["ddl_command"] == "COMMENT"]
+        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    show_summary_df = (
+        data_df[data_df["ddl_command"] == "SHOW"]
+        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    # Combine all summaries
+    all_df = pd.concat([create_summary_df, alter_summary_df, comment_summary_df, show_summary_df])
+
+    # Create a summary_df that averages across target_object
+    summary_df = all_df.groupby(["granularity", "system_name", "ddl_command"], as_index=False).agg(
+        avg_runtime=("avg_runtime", "mean")
+    )
+
+    # Add y-axis type control to sidebar
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+
+    plot_histo(
+        summary_df,
+        ddl_command="ALL",
+        experiment_name="All standard datasystems",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        additional_column="ddl_command",
+        legend_title="System | DDL Command",
+    )
+
+    plot_histo(
+        create_summary_df,
+        ddl_command="CREATE",
+        experiment_name="BATCHED CREATE with OPENDIC",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="CREATE: System, Object Type",
+    )
+    plot_histo(
+        alter_summary_df,
+        ddl_command="ALTER",
+        experiment_name="BATCHED CREATE with OPENDIC",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="ALTER: System, Object Type",
+    )
+
+    plot_histo(
+        comment_summary_df,
+        ddl_command="COMMENT",
+        experiment_name="BATCHED CREATE with OPENDIC",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="COMMENT: System, Object Type",
+    )
+
+    plot_histo(
+        show_summary_df,
+        ddl_command="SHOW",
+        experiment_name="BATCHED CREATE with OPENDIC",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="SHOW: System, Object Type",
+    )
 
 
 def chunked_avg_runtime(data_df, chunk_size=20):
@@ -464,6 +546,90 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def plot_histo(
+    data_df,
+    experiment_name,
+    ddl_command,
+    y_axis_type,
+    series_column="ddl_command",
+    additional_column=None,  # New argument for an additional column
+    legend_title="DDL Command",
+    marginal=None,
+    bar_mode="group",
+):
+    """
+    Args:
+        data_df (pd.DataFrame): Dataframe containing the data to be plotted.
+        experiment_name (str): Name of the experiment. (selected_db)
+        ddl_command (str): Type of DDL command.
+        y_axis_type (str): Type of y-axis scale. (Log, Linear)
+        series_column (str): Column name for the series.
+        legend_title (str): Title for the legend. (Legend_title for series)
+        line_dash (str): Line style for the plot.
+        markers (bool): Whether to show markers on the plot.
+    """
+    st.subheader(f"Average Runtime for {ddl_command} Commands in {experiment_name}")
+    with st.expander("Query Data"):
+        st.dataframe(data_df, use_container_width=True)
+
+    # Combine series_column and additional_column if provided
+    if additional_column:
+        data_df["combined_series"] = data_df[series_column] + " | " + data_df[additional_column]
+        color_column = "combined_series"
+    else:
+        color_column = series_column
+    data_df["granularity"] = data_df["granularity"].astype(str)  # Make sure x-axis is string not int
+
+    fig = px.histogram(
+        data_df,
+        x="granularity",
+        y="avg_runtime",
+        color=color_column,
+        labels={
+            "target_object": "Target Object",
+            "avg_runtime": "Avg. Runtime (s)",
+            "granularity": "Granularity",
+            "ddl_command": "DDL Command",
+            "system_name": "System Name",
+        },
+        marginal=marginal,
+        log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
+    )
+
+    fig.update_layout(
+        legend_title=legend_title,
+        template="plotly_white",
+        barmode=bar_mode,
+        yaxis=dict(title="Avg. Runtime (s)"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def create_tldr_dashboard(category_map: dict[str,str]):
+    datafiles = []
+    for path in category_map.values():
+        path_data_files = [path+f for f in os.listdir(path) if f.endswith(".parquet")]
+        datafiles.extend(path_data_files)
+
+    data_df = pd.concat([pd.read_parquet(data_file, engine="pyarrow") for data_file in datafiles],
+    ignore_index=False,)
+
+     # Display raw data in expandable section
+    with st.expander("View Raw Data (Partial of file size)"):
+        st.dataframe(data_df.iloc[::10], use_container_width=True)
+
+
+def plot_experiment_total_runtime():
+
+
+
+
+
+
 if __name__ == "__main__":
     category_map = {"Standard": "data/standard/", "Opendic": "data/opendic/", "Opendic(Batch)": "data/opendic_batch/"}
-    create_dashboard(category_map[sidebar_category])
+
+    if sidebar_category != "TLDR":
+        create_dashboard(category_map[sidebar_category])
+    else:
+        create_tldr_dashboard(category_map)
