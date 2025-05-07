@@ -129,25 +129,35 @@ def opendic_batch_dashboard(data_df, selected_db: str):
     create_summary_df = (
         data_df[data_df["ddl_command"] == "CREATE"]
         .groupby(["ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(query_runtime=("query_runtime", "sum"))
+        .agg(avg_runtime=("query_runtime", "sum"))
     )
+    alter_summary_df = (
+        data_df[data_df["ddl_command"] == "ALTER"]
+        .groupby(["ddl_command", "target_object", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    comment_summary_df = (
+        data_df[data_df["ddl_command"] == "COMMENT"]
+        .groupby(["ddl_command", "target_object", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    show_summary_df = (
+        data_df[data_df["ddl_command"] == "SHOW"]
+        .groupby(["ddl_command", "target_object", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    summary_df = pd.concat([create_summary_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
 
-    # Create visualization for CREATE commands
-    st.subheader(f"Average CREATE Query Runtime by Object & Granularity for {selected_db.capitalize()}")
-    fig = px.line(
-        create_summary_df,
-        x="granularity",
-        y="query_runtime",
-        color="target_object",
-        labels={"target_object": "Target Object", "query_runtime": "Runtime (s)", "granularity": "Granularity"},
-        log_y=(y_axis_type == "Log"),  # Apply log scale if selected
-    )
+    plot_summary(summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
 
-    fig.update_layout(xaxis_tickangle=-45, legend_title="Object Type", template="plotly_white", yaxis=dict(title="Runtime (s)"))
-    st.plotly_chart(fig, use_container_width=True)
+
 
 
 def chunked_avg_runtime(data_df, chunk_size=20):
@@ -165,7 +175,7 @@ def chunked_avg_runtime(data_df, chunk_size=20):
 
 def plot_summary(data_df, experiment_name, y_axis_type):
     st.subheader(f"Average Query Runtime by DDL type, Object & Granularity for {experiment_name.capitalize()}")
-    with st.expander("Details"):
+    with st.expander("Query Data"):
         st.dataframe(data_df, use_container_width=True)
 
     fig = px.line(
@@ -189,7 +199,7 @@ def plot_summary(data_df, experiment_name, y_axis_type):
 def plot_create(data_df, experiment_name, y_axis_type):
     # Create visualization for CREATE commands
     st.subheader(f"Average CREATE Query Runtime by Object & Granularity for {experiment_name.capitalize()}")
-    with st.expander("Details"):
+    with st.expander("Query Data"):
         st.dataframe(data_df, use_container_width=True)
     fig = px.line(
         data_df,
@@ -219,7 +229,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
     Plot the average runtime for `ddl_command` commands
     """
     st.subheader(f"Average Runtime for {ddl_command} Commands in {experiment_name}")
-    with st.expander("Details"):
+    with st.expander("Query Data"):
         st.dataframe(data_df, use_container_width=True)
 
     fig = px.line(
