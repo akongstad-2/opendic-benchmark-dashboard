@@ -219,7 +219,7 @@ def opendic_dashboard(data_df, selected_db):
     summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     # Plot the summary dataframes
     plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
@@ -264,7 +264,7 @@ def opendic_compare_all_dashboard(data_df):
     )
 
     # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_summary(
         summary_df,
@@ -337,7 +337,7 @@ def opendic_batch_dashboard(data_df, selected_db: str):
     summary_df = pd.concat([create_summary_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_summary(summary_df, ddl_command="SUMMARY", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
@@ -376,7 +376,7 @@ def opendic_batch_compare_all_dashboard(data_df):
     )
 
     # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_histo(
         summary_df,
@@ -615,7 +615,7 @@ def create_tldr_dashboard(category_map: dict[str, str]):
         ignore_index=False,
     )
 
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
 
     # Display raw data in expandable section
     with st.expander("View Raw Data (Partial of file size)"):
@@ -646,7 +646,7 @@ def plot_experiment_total_runtime(data_df):
         .sort_values("total_runtime", ascending=True)
     )  # Sort for better visualization
 
-    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60).round(2)
+    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60 ).round(2)
 
     with st.expander("View Total Runtime Data"):
         st.dataframe(avg_runtime_df, use_container_width=True)
