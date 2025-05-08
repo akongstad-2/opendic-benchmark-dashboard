@@ -18,14 +18,8 @@ st.sidebar.header("Dashboard Controls")
 sidebar_category = st.sidebar.radio("Select Dataset Category", options=["TLDR", "Standard", "Opendic", "Opendic(Batch)"])
 
 
-def create_dashboard(data_dir):
-    data_files = [f for f in os.listdir(data_dir) if f.endswith(".parquet")]
-    database_options = ["overview"] + sorted([os.path.splitext(f)[0] for f in data_files])
-
-    # Sidebar for controls
-    selected_db = st.sidebar.selectbox("Select Experiment", options=database_options, index=0)
-
-    # Load data
+@st.cache_data(ttl="1h")
+def load_data_standard(selected_db: str, data_dir: str, database_options):
     if selected_db != "overview":
         data_file = f"{data_dir}{selected_db}.parquet"
         data_df = pd.read_parquet(data_file, engine="pyarrow")
@@ -39,6 +33,19 @@ def create_dashboard(data_dir):
     # Display raw data in expandable section
     with st.expander("View Raw Data"):
         st.dataframe(data_df, use_container_width=True)
+
+    return data_df
+
+
+def create_dashboard(data_dir):
+    data_files = [f for f in os.listdir(data_dir) if f.endswith(".parquet")]
+    database_options = ["overview"] + sorted([os.path.splitext(f)[0] for f in data_files])
+
+    # Sidebar for controls
+    selected_db = st.sidebar.selectbox("Select Experiment", options=database_options, index=0)
+
+    data_df = load_data_standard(selected_db, data_dir, database_options)
+
 
     if sidebar_category == "Standard":
         if selected_db == "overview":
@@ -427,7 +434,7 @@ def opendic_batch_compare_all_dashboard(data_df):
         legend_title="SHOW: System, Object Type",
     )
 
-
+@st.cache_data
 def chunked_avg_runtime(data_df, chunk_size=20, columns=["system_name", "ddl_command", "target_object"]):
     """
     Args:
@@ -444,7 +451,7 @@ def chunked_avg_runtime(data_df, chunk_size=20, columns=["system_name", "ddl_com
         granularity=("granularity", lambda x: x.iloc[0]),  # Take the first granularity value from each chunk
     )
 
-
+@st.cache_data
 def plot_summary(
     data_df,
     experiment_name,
@@ -710,7 +717,8 @@ def plot_histo(
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
-def create_tldr_dashboard(category_map: dict[str, str]):
+@st.cache_data(ttl="1h")
+def load_data():
     datafiles = []
     for path in category_map.values():
         path_data_files = [path + f for f in os.listdir(path) if f.endswith(".parquet")]
@@ -720,12 +728,15 @@ def create_tldr_dashboard(category_map: dict[str, str]):
         [pd.read_parquet(data_file, engine="pyarrow") for data_file in datafiles],
         ignore_index=False,
     )
-
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
-
-    # Display raw data in expandable section
     with st.expander("View Raw Data (Partial of file size)"):
         st.dataframe(data_df.iloc[::10], use_container_width=True)
+    return data_df
+
+
+def create_tldr_dashboard(category_map: dict[str, str]):
+    data_df = load_data()
+
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_001_histo_experiment_total_runtime(data_df=data_df)
     plot_002_all_create_dashboard(data_df=data_df, y_axis_type=y_axis_type)
@@ -741,8 +752,7 @@ def plot_005_opendic_optimization_overview(data_df, y_axis_type):
         st.dataframe(data_df)
 
 
-
-
+@st.cache_data
 def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
     with st.expander("Show Raw Data"):
@@ -796,6 +806,7 @@ def plot_004_storage(data_df, y_axis_type: str):
     st.plotly_chart(fig_storage, use_container_width=True, config=config)
 
 
+@st.cache_data
 def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
     processed_df = data_df.copy()
     # Remove "_batch" and "_cache" from system_names
@@ -845,6 +856,7 @@ def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
     )
 
 
+@st.cache_data(ttl="1h")
 def plot_002_all_create_dashboard(data_df, y_axis_type: str):
     create_df = (
         data_df[
@@ -867,6 +879,7 @@ def plot_002_all_create_dashboard(data_df, y_axis_type: str):
     )
 
 
+@st.cache_data(ttl="1h")
 def plot_001_histo_experiment_total_runtime(data_df):
     """
     Plots the total runtime for each experiment/database as a horizontal bar chart.
