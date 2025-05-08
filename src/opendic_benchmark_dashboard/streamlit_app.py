@@ -102,6 +102,7 @@ def standard_dashboard(data_df, selected_db):
         y_axis_type=y_axis_type,
         series_column="ddl_command",
         line_dash="target_object",
+        legend_orientation="v",
     )
 
 
@@ -188,6 +189,7 @@ def standard_compare_all_dashboard(data_df):
         series_column="system_name",
         legend_title="System, Object Type",
         line_dash="ddl_command",
+        legend_orientation="v",
     )
 
 
@@ -450,6 +452,7 @@ def plot_summary(
     y_axis_type,
     series_column="ddl_command",
     legend_title="DDL Command",
+    legend_orientation="h",
     line_dash=None,
     markers: bool = False,
     symbol=None,
@@ -492,10 +495,14 @@ def plot_summary(
         template="plotly_white",
         yaxis=dict(title="Avg. Runtime (s)", exponentformat="none"),
         legend=dict(
-            font=dict(
-                size=9  # Adjust this value to your preference (smaller number = smaller text)
-            )
-        ),
+            orientation=legend_orientation,
+            xanchor="center",  # anchor at center
+            yanchor="bottom",  # anchor on bottom of text
+            x=0.5,  # horizontal center
+            y=1.0,  # just above the plotting area
+        )
+        if legend_orientation == "h"
+        else None,
     )
     # Add a config to enable SVG export via the modebar
     config = {
@@ -545,9 +552,11 @@ def plot_create(data_df, experiment_name, y_axis_type):
             range=[0, data_df["avg_runtime"].quantile(0.999)],  # Remove blantant outliers
         ),
         legend=dict(
-            font=dict(
-                size=9  # Adjust this value to your preference (smaller number = smaller text)
-            )
+            orientation="h",
+            xanchor="center",  # anchor at center
+            yanchor="bottom",  # anchor on bottom of text
+            x=0.5,  # horizontal center
+            y=1.0,  # just above the plotting area
         ),
     )
     # Add a config to enable SVG export via the modebar
@@ -587,7 +596,17 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
-        log_y=(y_axis_type == "Log"),  # Apply log scale if selected
+        log_y=(y_axis_type == "Log"),  # Apply log scale if selectedm
+    )
+
+    fig.update_layout(
+        legend=dict(
+            orientation="h",
+            xanchor="center",  # anchor at center
+            yanchor="bottom",  # anchor on bottom of text
+            x=0.5,  # horizontal center
+            y=1.0,  # just above the plotting area
+        ),
     )
 
     # Add a config to enable SVG export via the modebar
@@ -663,9 +682,14 @@ def plot_histo(
         barmode=bar_mode,
         yaxis=dict(title="Avg. Runtime (s)", exponentformat="none"),
         legend=dict(
+            orientation="h",
+            x=0.5,  # horizontal center
+            xanchor="center",
+            y=1.0,  # just above the plotting area
+            yanchor="bottom",
             font=dict(
                 size=9  # Adjust this value to your preference (smaller number = smaller text)
-            )
+            ),
         ),
     )
 
@@ -709,6 +733,16 @@ def create_tldr_dashboard(category_map: dict[str, str]):
     plot_003_all_alter_commet_show(data_df=data_df, y_axis_type=y_axis_type)
 
 
+def plot_005_opendic_optimization_overview(data_df, y_axis_type):
+    # Remove polaris from system names
+    data_df["system_name"] = data_df["system_name"].str.replace("_polaris", "", regex=True)
+
+    with st.expander("Show Raw Data"):
+        st.dataframe(data_df)
+
+
+
+
 def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
     with st.expander("Show Raw Data"):
@@ -741,7 +775,7 @@ def plot_004_storage(data_df, y_axis_type: str):
             orientation="h",
             x=0.5,  # horizontal center
             xanchor="center",
-            y=1.05,  # just above the plotting area
+            y=1.0,  # just above the plotting area
             yanchor="bottom",
         ),
     )
@@ -843,6 +877,9 @@ def plot_001_histo_experiment_total_runtime(data_df):
     """
     st.subheader("Total Runtime by Experiment/Database")
 
+    # Remove polaris from system names
+    data_df["system_name"] = data_df["system_name"].str.replace("_polaris", "", regex=True)
+
     # Calculate average runtime for each unique operation to account for repetitions
     avg_runtime_df = data_df.groupby(["system_name", "ddl_command", "granularity"], as_index=False).agg(
         avg_runtime=("query_runtime", "mean")
@@ -855,10 +892,10 @@ def plot_001_histo_experiment_total_runtime(data_df):
         .sort_values("total_runtime", ascending=True)
     )  # Sort for better visualization
 
-    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60).round(2)
+    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60).round(4)
 
     with st.expander("View Total Runtime Data"):
-        st.dataframe(avg_runtime_df, use_container_width=True)
+        st.dataframe(total_runtime_df, use_container_width=True)
 
     # Create horizontal bar chart
     fig = px.bar(
