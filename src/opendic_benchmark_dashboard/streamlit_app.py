@@ -267,16 +267,6 @@ def opendic_compare_all_dashboard(data_df):
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_summary(
-        summary_df,
-        ddl_command="ALL",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="System, DDL Command, Object Type",
-        line_dash="ddl_command",
-    )
-
-    plot_summary(
         create_summary_df,
         ddl_command="CREATE",
         experiment_name="All standard datasystems",
@@ -311,6 +301,16 @@ def opendic_compare_all_dashboard(data_df):
         legend_title="SHOW: System, Object Type",
     )
 
+    plot_summary(
+        summary_df,
+        ddl_command="ALL",
+        experiment_name="All standard datasystems",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="System, DDL Command, Object Type",
+        line_dash="ddl_command",
+    )
+
 
 def opendic_batch_dashboard(data_df, selected_db: str):
     # Filter for 'CREATE' commands and average runtimes
@@ -339,11 +339,11 @@ def opendic_batch_dashboard(data_df, selected_db: str):
     # Add y-axis type control to sidebar
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
-    plot_summary(summary_df, ddl_command="SUMMARY", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_summary(summary_df, ddl_command="SUMMARY", experiment_name=selected_db, y_axis_type=y_axis_type)
 
 
 def opendic_batch_compare_all_dashboard(data_df):
@@ -424,14 +424,18 @@ def opendic_batch_compare_all_dashboard(data_df):
     )
 
 
-def chunked_avg_runtime(data_df, chunk_size=20):
+def chunked_avg_runtime(data_df, chunk_size=20, columns=["system_name", "ddl_command", "target_object"]):
+    """
+    Args:
+        columns: List of columns to group by for computing chunked averages.
+    """
     # Create chunked averages (each row represents the average of 20 rows)
     # assign chunk IDs to each row
     create_summary = data_df.reset_index(drop=True)
     create_summary["chunk_id"] = create_summary.index // chunk_size
 
     # group by these chunk IDs and compute the average for each chunk
-    return create_summary.groupby(["system_name", "ddl_command", "chunk_id", "target_object"], as_index=False).agg(
+    return create_summary.groupby(columns + ["chunk_id"], as_index=False).agg(
         avg_runtime=("avg_runtime", "mean"),
         granularity=("granularity", lambda x: x.iloc[0]),  # Take the first granularity value from each chunk
     )
@@ -482,7 +486,21 @@ def plot_summary(
     )
 
     fig.update_layout(legend_title=legend_title, template="plotly_white", yaxis=dict(title="Avg. Runtime (s)"))
-    st.plotly_chart(fig, use_container_width=True)
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 def plot_create(data_df, experiment_name, y_axis_type):
@@ -516,7 +534,21 @@ def plot_create(data_df, experiment_name, y_axis_type):
             range=[0, data_df["avg_runtime"].quantile(0.999)],  # Remove blantant outliers
         ),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
@@ -542,7 +574,21 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
         log_y=(y_axis_type == "Log"),  # Apply log scale if selected
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 def plot_histo(
@@ -601,7 +647,22 @@ def plot_histo(
         barmode=bar_mode,
         yaxis=dict(title="Avg. Runtime (s)"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 def create_tldr_dashboard(category_map: dict[str, str]):
@@ -615,16 +676,76 @@ def create_tldr_dashboard(category_map: dict[str, str]):
         ignore_index=False,
     )
 
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=0)
+    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     # Display raw data in expandable section
     with st.expander("View Raw Data (Partial of file size)"):
         st.dataframe(data_df.iloc[::10], use_container_width=True)
 
-    plot_experiment_total_runtime(data_df=data_df)
+    plot_001_histo_experiment_total_runtime(data_df=data_df)
+    plot_002_all_create_dashboard(data_df=data_df, y_axis_type=y_axis_type)
+    plot_003_all_alter_commet_show(data_df=data_df, y_axis_type=y_axis_type)
 
 
-def plot_experiment_total_runtime(data_df):
+def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
+    alter_summary_df = (
+        data_df[data_df["ddl_command"] == "ALTER"]
+        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    comment_summary_df = (
+        data_df[data_df["ddl_command"] == "COMMENT"]
+        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    show_summary_df = (
+        data_df[data_df["ddl_command"] == "SHOW"]
+        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+
+    plot_summary(
+        alter_summary_df,
+        ddl_command="ALTER",
+        experiment_name="ALL",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="System Name",
+    )
+
+    plot_summary(
+        comment_summary_df,
+        ddl_command="COMMENT",
+        experiment_name="ALL",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="System Name",
+    )
+
+    plot_summary(
+        show_summary_df,
+        ddl_command="SHOW",
+        experiment_name="ALL",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="System Name",
+    )
+
+
+def plot_002_all_create_dashboard(data_df, y_axis_type: str):
+    create_df = (
+        data_df[data_df["ddl_command"] == "CREATE"]
+        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
+        .agg(avg_runtime=(("query_runtime"), "mean"))
+    )
+    create_summary_df = chunked_avg_runtime(create_df, chunk_size=50, columns=["system_name", "ddl_command"])
+
+    plot_summary(
+        create_summary_df, ddl_command="CREATE", experiment_name="ALL", y_axis_type=y_axis_type, series_column="system_name", legend_title="System Name"
+    )
+
+
+def plot_001_histo_experiment_total_runtime(data_df):
     """
     Plots the total runtime for each experiment/database as a horizontal bar chart.
 
@@ -646,7 +767,7 @@ def plot_experiment_total_runtime(data_df):
         .sort_values("total_runtime", ascending=True)
     )  # Sort for better visualization
 
-    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60 ).round(2)
+    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60).round(2)
 
     with st.expander("View Total Runtime Data"):
         st.dataframe(avg_runtime_df, use_container_width=True)
@@ -664,11 +785,25 @@ def plot_experiment_total_runtime(data_df):
     fig.update_layout(
         template="plotly_white",
         showlegend=False,  # No need for legend as y-axis shows the system names
-        margin=dict(l=20, r=20, t=30, b=20),
         xaxis=dict(title="Total Runtime (hours)"),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    # Add SVG export capability
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 
 if __name__ == "__main__":
