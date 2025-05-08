@@ -18,6 +18,10 @@ dependencies = [
 opendic-benchmark-dashboard = "opendic_benchmark_dashboard:main"
 opendic-benchmark-streamlit = "opendic_benchmark_dashboard:run_streamlit_app"
 
+[tool.setuptools.packages.find]
+where = ['src']
+include = ['opendic_benchmark_dashboard*']
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
