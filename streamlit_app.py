@@ -32,7 +32,13 @@ def load_data_standard(selected_db: str, data_dir: str, database_options):
 
     # Display raw data in expandable section
     with st.expander("View Raw Data"):
-        st.dataframe(data_df, use_container_width=True)
+        mem_bytes = data_df.memory_usage(deep=True).sum()
+        mem_mb = mem_bytes / (1024**2)
+        if mem_mb > 50:
+            st.warning(f"Dataframe size is {mem_mb:.2f} MB. Showing Compacted")
+            st.dataframe(data_df.iloc[::10], use_container_width=True)
+        else:
+            st.dataframe(data_df, use_container_width=True)
 
     return data_df
 
@@ -45,7 +51,6 @@ def create_dashboard(data_dir):
     selected_db = st.sidebar.selectbox("Select Experiment", options=database_options, index=0)
 
     data_df = load_data_standard(selected_db, data_dir, database_options)
-
 
     if sidebar_category == "Standard":
         if selected_db == "overview":
@@ -434,6 +439,7 @@ def opendic_batch_compare_all_dashboard(data_df):
         legend_title="SHOW: System, Object Type",
     )
 
+
 @st.cache_data
 def chunked_avg_runtime(data_df, chunk_size=20, columns=["system_name", "ddl_command", "target_object"]):
     """
@@ -450,6 +456,7 @@ def chunked_avg_runtime(data_df, chunk_size=20, columns=["system_name", "ddl_com
         avg_runtime=("avg_runtime", "mean"),
         granularity=("granularity", lambda x: x.iloc[0]),  # Take the first granularity value from each chunk
     )
+
 
 @st.cache_data
 def plot_summary(
