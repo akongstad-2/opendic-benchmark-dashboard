@@ -485,7 +485,16 @@ def plot_summary(
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
     )
 
-    fig.update_layout(legend_title=legend_title, template="plotly_white", yaxis=dict(title="Avg. Runtime (s)"))
+    fig.update_layout(
+        legend_title=legend_title,
+        template="plotly_white",
+        yaxis=dict(title="Avg. Runtime (s)", exponentformat="none"),
+        legend=dict(
+            font=dict(
+                size=9  # Adjust this value to your preference (smaller number = smaller text)
+            )
+        ),
+    )
     # Add a config to enable SVG export via the modebar
     config = {
         "toImageButtonOptions": {
@@ -527,11 +536,16 @@ def plot_create(data_df, experiment_name, y_axis_type):
         xaxis_tickangle=-45,
         legend_title="Object Type",
         template="plotly_white",
-        yaxis=dict(title="Avg. Runtime (s)")
+        yaxis=dict(title="Avg. Runtime (s)", exponentformat="none")
         if y_axis_type == "Log"
         else dict(
             title="Avg. Runtime (s)",
             range=[0, data_df["avg_runtime"].quantile(0.999)],  # Remove blantant outliers
+        ),
+        legend=dict(
+            font=dict(
+                size=9  # Adjust this value to your preference (smaller number = smaller text)
+            )
         ),
     )
     # Add a config to enable SVG export via the modebar
@@ -645,7 +659,12 @@ def plot_histo(
         legend_title=legend_title,
         template="plotly_white",
         barmode=bar_mode,
-        yaxis=dict(title="Avg. Runtime (s)"),
+        yaxis=dict(title="Avg. Runtime (s)", exponentformat="none"),
+        legend=dict(
+            font=dict(
+                size=9  # Adjust this value to your preference (smaller number = smaller text)
+            )
+        ),
     )
 
     # Add a config to enable SVG export via the modebar
@@ -741,7 +760,12 @@ def plot_002_all_create_dashboard(data_df, y_axis_type: str):
     create_summary_df = chunked_avg_runtime(create_df, chunk_size=50, columns=["system_name", "ddl_command"])
 
     plot_summary(
-        create_summary_df, ddl_command="CREATE", experiment_name="ALL", y_axis_type=y_axis_type, series_column="system_name", legend_title="System Name"
+        create_summary_df,
+        ddl_command="CREATE",
+        experiment_name="ALL",
+        y_axis_type=y_axis_type,
+        series_column="system_name",
+        legend_title="System Name",
     )
 
 
