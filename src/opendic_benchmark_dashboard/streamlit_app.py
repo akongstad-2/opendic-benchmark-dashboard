@@ -4,6 +4,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from opendic_benchmark_dashboard import storage_data
+
 # Set page title and layout
 st.set_page_config(page_title="OpenDIC Benchmark Dashboard", layout="wide")
 
@@ -703,22 +705,80 @@ def create_tldr_dashboard(category_map: dict[str, str]):
 
     plot_001_histo_experiment_total_runtime(data_df=data_df)
     plot_002_all_create_dashboard(data_df=data_df, y_axis_type=y_axis_type)
+    plot_004_storage(data_df=storage_data.df_storage, y_axis_type=y_axis_type)
     plot_003_all_alter_commet_show(data_df=data_df, y_axis_type=y_axis_type)
 
 
+def plot_004_storage(data_df, y_axis_type: str):
+    # Display the raw data
+    with st.expander("Show Raw Data"):
+        st.dataframe(data_df)
+
+    fig_storage = px.bar(
+        data_df,
+        x="Database System",
+        y="Storage Usage (GB)",
+        color="Database System",
+        title="Storage Usage by Datasystem System (GB)",
+        log_y=(y_axis_type == "Log"),
+        labels={
+            "Database System": "Data System",
+            "Storage Usage (GB)": "Storage Usage (GB)",
+            "Metadatafiles Count": "Metadatafiles",
+            "Datafiles Count": "Datafiles",
+        },
+        hover_data={
+            "Database System": True,
+            "Storage Usage (GB)": True,
+            "Metadatafiles Count": True,
+            "Datafiles Count": True,
+        },
+    )
+    fig_storage.update_layout(
+        xaxis_title="System",
+        yaxis_title="Storage Usage (GB)",
+        legend=dict(
+            orientation="h",
+            x=0.5,  # horizontal center
+            xanchor="center",
+            y=1.05,  # just above the plotting area
+            yanchor="bottom",
+        ),
+    )
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig_storage, use_container_width=True, config=config)
+
+
 def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
+    processed_df = data_df.copy()
+    # Remove "_batch" and "_cache" from system_names
+    processed_df["system_name"] = processed_df["system_name"].str.replace("_batch|_cache", "", regex=True)
+
     alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
+        processed_df[processed_df["ddl_command"] == "ALTER"]
         .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
         .agg(avg_runtime=(("query_runtime"), "mean"))
     )
     comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
+        processed_df[processed_df["ddl_command"] == "COMMENT"]
         .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
         .agg(avg_runtime=(("query_runtime"), "mean"))
     )
     show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
+        processed_df[processed_df["ddl_command"] == "SHOW"]
         .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
         .agg(avg_runtime=(("query_runtime"), "mean"))
     )
@@ -753,9 +813,13 @@ def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
 
 def plot_002_all_create_dashboard(data_df, y_axis_type: str):
     create_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
+        data_df[
+            (data_df["ddl_command"] == "CREATE")
+            & (~data_df["system_name"].str.contains("batch", case=False, na=False))
+            & (~data_df["system_name"].str.contains("cache", case=False, na=False))
+        ]
         .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
+        .agg(avg_runtime=("query_runtime", "mean"))
     )
     create_summary_df = chunked_avg_runtime(create_df, chunk_size=50, columns=["system_name", "ddl_command"])
 
