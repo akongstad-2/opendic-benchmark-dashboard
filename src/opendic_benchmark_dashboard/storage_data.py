@@ -5,7 +5,7 @@ db_systems = ["Opendict (No cleanup)", "Opendict", "Opendict (batched)", "DuckDB
 
 # Convert all storage to GB for consistency
 storage_data = [
-    105.39,  # Opendict: 105.39 GB
+    105.39 * (100_000/16_552),  # Opendict: 105.39 GB
     28.92,  # Standard: 28.92 GB
     10.08 / 1000,  # to GB
     1.24,  # DuckDB: 1.24 GB
@@ -13,7 +13,7 @@ storage_data = [
 ]
 
 datafiles = [
-    16928,  # Opendict
+    16928 * (100_000/16_552),  # Opendict
     1298,  # Standard
     82,  # In-mem Cache
     1,  # DuckDB (100% represented as 1 for visualization)
@@ -21,7 +21,7 @@ datafiles = [
 ]
 
 metadatafiles = [
-    67995,  # Opendict
+    67995 * (100_000/16_552),  # Opendict
     119484,  # Standard
     361,  # In-mem Cache
     0,  # DuckDB (no separate metadata files mentioned)
