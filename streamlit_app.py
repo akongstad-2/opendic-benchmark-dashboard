@@ -1,10 +1,13 @@
 import os
 
+import duckdb
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 from opendic_benchmark_dashboard import storage_data
+
+ALL_DATA_VIEW = "all_data"
 
 # Set page title and layout
 st.set_page_config(page_title="OpenDIC Benchmark Dashboard", layout="wide")
@@ -15,10 +18,119 @@ st.write("Visualize and compare benchmark results for different databases")
 
 # Create tabs for switching between different dataset categories
 st.sidebar.header("Dashboard Controls")
-sidebar_category = st.sidebar.radio("Select Dataset Category", options=["TLDR", "Standard", "Opendic", "Opendic(Batch)"])
+sidebar_category = st.sidebar.radio("Select Dataset Category", options=["TLDR", "Standard", "Opendic", "Opendic_batch"])
 
 
-@st.cache_data(ttl="6h")
+def load_all_data():
+    # Initialize DuckDB connection
+    conn = duckdb.connect(database=":memory:")
+
+    # Create a list of all parquet files
+    datafiles = []
+    for path in category_map.values():
+        path_data_files = [path + f for f in os.listdir(path) if f.endswith(".parquet")]
+        datafiles.extend(path_data_files)
+
+    # Register all parquet files as a view in DuckDB
+    conn.execute(f"CREATE VIEW {ALL_DATA_VIEW} AS SELECT * FROM parquet_scan({datafiles})")
+
+    return conn
+
+
+def get_all_create_data(conn):
+    """Get aggregated data for CREATE operations using DuckDB"""
+    query = f"""
+    SELECT
+        system_name,
+        ddl_command,
+        granularity,
+        AVG(query_runtime) as avg_runtime
+    FROM {ALL_DATA_VIEW}
+    WHERE ddl_command = 'CREATE'
+    GROUP BY system_name, ddl_command, granularity
+    ORDER BY granularity asc;
+    """
+
+    # Execute query and return as pandas DataFrame
+    result = conn.execute(query).fetch_df()
+    return result
+
+
+def get_all_alter_data(conn):
+    """Get aggregated data for ALTER operations using DuckDB"""
+    query = f"""
+    SELECT
+        system_name,
+        ddl_command,
+        granularity,
+        AVG(query_runtime) as avg_runtime
+    FROM {ALL_DATA_VIEW}
+    WHERE ddl_command = 'ALTER'
+    GROUP BY system_name, ddl_command, granularity
+    ORDER BY granularity asc;
+    """
+
+    # Execute query and return as pandas DataFrame
+    result = conn.execute(query).fetch_df()
+    return result
+
+
+def get_all_comment_data(conn):
+    """Get aggregated data for COMMENT operations using DuckDB"""
+    query = f"""
+    SELECT
+        system_name,
+        ddl_command,
+        granularity,
+        AVG(query_runtime) as avg_runtime
+    FROM {ALL_DATA_VIEW}
+    WHERE ddl_command = 'COMMENT'
+    GROUP BY system_name, ddl_command, granularity
+    ORDER BY granularity asc;
+    """
+
+    # Execute query and return as pandas DataFrame
+    result = conn.execute(query).fetch_df()
+    return result
+
+
+def get_all_show_data(conn):
+    """Get aggregated data for SHOW operations using DuckDB"""
+    query = f"""
+    SELECT
+        system_name,
+        ddl_command,
+        granularity,
+        AVG(query_runtime) as avg_runtime
+    FROM {ALL_DATA_VIEW}
+    WHERE ddl_command = 'SHOW'
+    GROUP BY system_name, ddl_command, granularity
+    ORDER BY granularity asc;
+    """
+
+    # Execute query and return as pandas DataFrame
+    result = conn.execute(query).fetch_df()
+    return result
+
+
+def get_data(conn, command, parquet_files: list[str], experiment: str):
+    conn.execute(f"CREATE VIEW if not exists data_{experiment} AS SELECT * FROM parquet_scan({parquet_files})")
+    query: str = f"""
+        SELECT
+            system_name,
+            ddl_command,
+            target_object,
+            granularity,
+            AVG(query_runtime) AS avg_runtime
+        FROM data_{experiment}
+        WHERE ddl_command = '{command}'
+        GROUP BY system_name, ddl_command, target_object, granularity
+        ORDER BY granularity asc;
+    """
+    result = conn.execute(query).fetch_df()
+    return result
+
+
 def plot_dataframe(data_df, text: str):
     with st.expander(text):
         mem_bytes = data_df.memory_usage(deep=True).sum()
@@ -33,88 +145,65 @@ def plot_dataframe(data_df, text: str):
         st.dataframe(data_df, use_container_width=True)
 
 
-@st.cache_data(ttl="6h")
-def load_data_standard(selected_db: str, data_dir: str, database_options):
-    if selected_db != "overview":
-        data_file = f"{data_dir}{selected_db}.parquet"
-        data_df = pd.read_parquet(data_file, engine="pyarrow")
-
-    else:
-        data_df = pd.concat(
-            [pd.read_parquet(f"{data_dir}{db}.parquet", engine="pyarrow") for db in database_options if db != "overview"],
-            ignore_index=False,
-        )
-
-    # Display raw data in expandable section
-    plot_dataframe(data_df, "View Raw Data")
-
-    return data_df
-
-
-def create_dashboard(data_dir):
+def create_dashboard(data_dir, conn):
     data_files = [f for f in os.listdir(data_dir) if f.endswith(".parquet")]
     database_options = ["overview"] + sorted([os.path.splitext(f)[0] for f in data_files])
 
     # Sidebar for controls
     selected_db = st.sidebar.selectbox("Select Experiment", options=database_options, index=0)
-
-    data_df = load_data_standard(selected_db, data_dir, database_options)
+    data_files = [data_dir + f for f in data_files]
 
     if sidebar_category == "Standard":
         if selected_db == "overview":
-            standard_compare_all_dashboard(data_df)
+            standard_compare_all_dashboard(conn, parquet_files=data_files, sidebar_category=sidebar_category)
         else:
-            standard_dashboard(data_df, selected_db=selected_db)
+            standard_dashboard(
+                conn,
+                parquet_files=[data_dir + selected_db + ".parquet"],
+                sidebar_category=sidebar_category,
+                selected_db=selected_db,
+            )
     elif sidebar_category == "Opendic":
         if selected_db == "overview":
-            opendic_compare_all_dashboard(data_df)
+            standard_compare_all_dashboard(conn, parquet_files=data_files, sidebar_category=sidebar_category)
         else:
-            opendic_dashboard(data_df, selected_db=selected_db)
-    elif sidebar_category == "Opendic(Batch)":
+            standard_dashboard(
+                conn,
+                parquet_files=[data_dir + selected_db + ".parquet"],
+                sidebar_category=sidebar_category,
+                selected_db=selected_db,
+            )
+    elif sidebar_category == "Opendic_batch":
         if selected_db == "overview":
-            opendic_batch_compare_all_dashboard(data_df)
+            opendic_batch(conn, parquet_files=data_files, sidebar_category=sidebar_category, experiment_name="ALL")
         else:
-            opendic_batch_dashboard(data_df, selected_db=selected_db)
+            opendic_batch(
+                conn,
+                parquet_files=[data_dir + selected_db + ".parquet"],
+                sidebar_category=sidebar_category,
+                experiment_name=selected_db,
+            )
 
 
-def standard_dashboard(data_df, selected_db):
+def standard_dashboard(conn, parquet_files: list[str], sidebar_category, selected_db):
     # Overview dashboard
     # Filter for 'CREATE' commands and average runtimes
-    create_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    create_summary_df = chunked_avg_runtime(
-        create_df,
-        chunk_size=20,
-    )
-    alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
+    create_df = get_data(conn, "CREATE", parquet_files, sidebar_category)
+    create_summary_df = chunked_avg_runtime(create_df, chunk_size=50)
+    alter_summary_df = get_data(conn, "ALTER", parquet_files, sidebar_category)
+    comment_summary_df = get_data(conn, "COMMENT", parquet_files, sidebar_category)
+    show_summary_df = get_data(conn, "SHOW", parquet_files, sidebar_category)
     # Combine all summaries
-    small_create_df = chunked_avg_runtime(create_df, chunk_size=250)
+    small_create_df = chunked_avg_runtime(create_df, chunk_size=1000)
     summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
     plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(alter_summary_df, ddl_command="ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(comment_summary_df, ddl_command="COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
+    plot_ddl(show_summary_df, ddl_command="SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
     plot_summary(
         summary_df,
         ddl_command="ALL",
@@ -126,40 +215,24 @@ def standard_dashboard(data_df, selected_db):
     )
 
 
-def standard_compare_all_dashboard(data_df):
-    create_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
+def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_category):
     create_summary_df = chunked_avg_runtime(
-        create_df,
-        chunk_size=20,
+        get_data(conn, "CREATE", parquet_files, sidebar_category),
+        chunk_size=50,
     )
-    alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
+    alter_summary_df = get_data(conn, "ALTER", parquet_files, sidebar_category)
+    comment_summary_df = get_data(conn, "COMMENT", parquet_files, sidebar_category)
+    show_summary_df = get_data(conn, "SHOW", parquet_files, sidebar_category)
+
     # Combine all summaries
-    small_create_df = chunked_avg_runtime(create_df, chunk_size=1000)
-    all_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
+    small_create_df = chunked_avg_runtime(get_data(conn, "CREATE", parquet_files, sidebar_category), chunk_size=1000)
+    summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
 
-    # Create a summary_df that averages across target_object
-    summary_df = all_df.groupby(["system_name", "ddl_command", "granularity"], as_index=False).agg(
-        avg_runtime=("avg_runtime", "mean")
-    )
-
+    if sidebar_category == "Standard":
+        # Create a summary_df that averages across target_object
+        summary_df = summary_df.groupby(["system_name", "ddl_command", "granularity"], as_index=False).agg(
+            avg_runtime=("avg_runtime", "mean")
+        )
     # Add y-axis type control to sidebar
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
@@ -213,191 +286,12 @@ def standard_compare_all_dashboard(data_df):
     )
 
 
-def opendic_dashboard(data_df, selected_db):
-    # Filter for 'CREATE' commands and average runtimes
-    create_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    create_summary_df = chunked_avg_runtime(
-        create_df,
-        chunk_size=20,
-    )
-    alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    small_create_df = chunked_avg_runtime(create_df, chunk_size=250)
-    summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
-
-    # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
-
-    # Plot the summary dataframes
-    plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_summary(summary_df, ddl_command="ALL", experiment_name=selected_db, y_axis_type=y_axis_type)
-
-
-def opendic_compare_all_dashboard(data_df):
-    create_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    create_summary_df = chunked_avg_runtime(
-        create_df,
-        chunk_size=20,
-    )
-    alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    # Combine all summaries
-    small_create_df = chunked_avg_runtime(create_df, chunk_size=1000)
-    all_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
-
-    # Create a summary_df that averages across target_object
-    summary_df = all_df.groupby(["system_name", "ddl_command", "granularity"], as_index=False).agg(
-        avg_runtime=("avg_runtime", "mean")
-    )
-
-    # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
-
-    plot_summary(
-        create_summary_df,
-        ddl_command="CREATE",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="CREATE: System, Object Type",
-    )
-    plot_summary(
-        alter_summary_df,
-        ddl_command="ALTER",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="ALTER: System, Object Type",
-    )
-
-    plot_summary(
-        comment_summary_df,
-        ddl_command="COMMENT",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="COMMENT: System, Object Type",
-    )
-
-    plot_summary(
-        show_summary_df,
-        ddl_command="SHOW",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="SHOW: System, Object Type",
-    )
-
-    plot_summary(
-        summary_df,
-        ddl_command="ALL",
-        experiment_name="All standard datasystems",
-        y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="System, DDL Command, Object Type",
-        line_dash="ddl_command",
-    )
-
-
-def opendic_batch_dashboard(data_df, selected_db: str):
-    # Filter for 'CREATE' commands and average runtimes
-    create_summary_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=("query_runtime", "sum"))
-    )
-    alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
-        .groupby(["system_name", "ddl_command", "target_object", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
+def opendic_batch(conn, parquet_files: list[str], sidebar_category, experiment_name):
+    create_summary_df = get_data(conn, "CREATE", parquet_files, sidebar_category)
+    alter_summary_df = get_data(conn, "ALTER", parquet_files, sidebar_category)
+    comment_summary_df = get_data(conn, "COMMENT", parquet_files, sidebar_category)
+    show_summary_df = get_data(conn, "SHOW", parquet_files, sidebar_category)
     summary_df = pd.concat([create_summary_df, alter_summary_df, comment_summary_df, show_summary_df])
-
-    # Add y-axis type control to sidebar
-    y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
-
-    plot_create(create_summary_df, experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(alter_summary_df, "ALTER", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(comment_summary_df, "COMMENT", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_ddl(show_summary_df, "SHOW", experiment_name=selected_db, y_axis_type=y_axis_type)
-    plot_summary(summary_df, ddl_command="SUMMARY", experiment_name=selected_db, y_axis_type=y_axis_type)
-
-
-def opendic_batch_compare_all_dashboard(data_df):
-    create_summary_df = (
-        data_df[data_df["ddl_command"] == "CREATE"]
-        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
-        .agg(avg_runtime=("query_runtime", "sum"))
-    )
-    alter_summary_df = (
-        data_df[data_df["ddl_command"] == "ALTER"]
-        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        data_df[data_df["ddl_command"] == "COMMENT"]
-        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        data_df[data_df["ddl_command"] == "SHOW"]
-        .groupby(["granularity", "system_name", "ddl_command", "target_object"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    # Combine all summaries
-    all_df = pd.concat([create_summary_df, alter_summary_df, comment_summary_df, show_summary_df])
-
-    # Create a summary_df that averages across target_object
-    summary_df = all_df.groupby(["granularity", "system_name", "ddl_command"], as_index=False).agg(
-        avg_runtime=("avg_runtime", "mean")
-    )
 
     # Add y-axis type control to sidebar
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
@@ -405,7 +299,7 @@ def opendic_batch_compare_all_dashboard(data_df):
     plot_histo(
         summary_df,
         ddl_command="ALL",
-        experiment_name="All standard datasystems",
+        experiment_name=f"All {experiment_name}",
         y_axis_type=y_axis_type,
         series_column="system_name",
         additional_column="ddl_command",
@@ -415,7 +309,7 @@ def opendic_batch_compare_all_dashboard(data_df):
     plot_histo(
         create_summary_df,
         ddl_command="CREATE",
-        experiment_name="BATCHED CREATE with OPENDIC",
+        experiment_name=f"BATCHED CREATE with {experiment_name}",
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="CREATE: System, Object Type",
@@ -423,7 +317,7 @@ def opendic_batch_compare_all_dashboard(data_df):
     plot_histo(
         alter_summary_df,
         ddl_command="ALTER",
-        experiment_name="BATCHED CREATE with OPENDIC",
+        experiment_name=f"BATCHED CREATE with {experiment_name}",
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="ALTER: System, Object Type",
@@ -432,7 +326,7 @@ def opendic_batch_compare_all_dashboard(data_df):
     plot_histo(
         comment_summary_df,
         ddl_command="COMMENT",
-        experiment_name="BATCHED CREATE with OPENDIC",
+        experiment_name=f"BATCHED CREATE with {experiment_name}",
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="COMMENT: System, Object Type",
@@ -441,7 +335,7 @@ def opendic_batch_compare_all_dashboard(data_df):
     plot_histo(
         show_summary_df,
         ddl_command="SHOW",
-        experiment_name="BATCHED CREATE with OPENDIC",
+        experiment_name=f"BATCHED CREATE with {experiment_name}",
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="SHOW: System, Object Type",
@@ -449,7 +343,7 @@ def opendic_batch_compare_all_dashboard(data_df):
 
 
 @st.cache_data
-def chunked_avg_runtime(data_df, chunk_size=20, columns=["system_name", "ddl_command", "target_object"]):
+def chunked_avg_runtime(data_df, chunk_size=50, columns=["system_name", "ddl_command", "target_object"]):
     """
     Args:
         columns: List of columns to group by for computing chunked averages.
@@ -490,6 +384,8 @@ def plot_summary(
         line_dash (str): Line style for the plot.
         markers (bool): Whether to show markers on the plot.
     """
+    st.subheader(f"Avg runtime: {experiment_name} - {ddl_command}")
+
     plot_dataframe(data_df, "Query Data")
 
     fig = px.line(
@@ -734,30 +630,13 @@ def plot_histo(
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
-@st.cache_data(ttl="1h")
-def load_data():
-    datafiles = []
-    for path in category_map.values():
-        path_data_files = [path + f for f in os.listdir(path) if f.endswith(".parquet")]
-        datafiles.extend(path_data_files)
-
-    data_df = pd.concat(
-        [pd.read_parquet(data_file, engine="pyarrow") for data_file in datafiles],
-        ignore_index=False,
-    )
-    plot_dataframe(data_df, "View Raw Data")
-    return data_df
-
-
-def create_tldr_dashboard(category_map: dict[str, str]):
-    data_df = load_data()
-
+def create_tldr_dashboard(category_map: dict[str, str], conn: duckdb.DuckDBPyConnection):
     y_axis_type = st.sidebar.selectbox("Y-axis scale", options=["Linear", "Log"], index=1)
 
-    plot_001_histo_experiment_total_runtime(data_df=data_df)
-    plot_002_all_create_dashboard(data_df=data_df, y_axis_type=y_axis_type)
+    plot_001_histo_experiment_total_runtime(conn)
+    plot_002_all_create_dashboard(conn, y_axis_type=y_axis_type)
     plot_004_storage(data_df=storage_data.df_storage, y_axis_type=y_axis_type)
-    plot_003_all_alter_commet_show(data_df=data_df, y_axis_type=y_axis_type)
+    plot_003_all_alter_commet_show(conn=conn, y_axis_type=y_axis_type)
 
 
 def plot_005_opendic_optimization_overview(data_df, y_axis_type):
@@ -768,7 +647,6 @@ def plot_005_opendic_optimization_overview(data_df, y_axis_type):
         st.dataframe(data_df)
 
 
-@st.cache_data
 def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
     plot_dataframe(data_df, "Show raw data")
@@ -821,27 +699,13 @@ def plot_004_storage(data_df, y_axis_type: str):
     st.plotly_chart(fig_storage, use_container_width=True, config=config)
 
 
-@st.cache_data
-def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
-    processed_df = data_df.copy()
-    # Remove "_batch" and "_cache" from system_names
-    processed_df["system_name"] = processed_df["system_name"].str.replace("_batch|_cache", "", regex=True)
-
-    alter_summary_df = (
-        processed_df[processed_df["ddl_command"] == "ALTER"]
-        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    comment_summary_df = (
-        processed_df[processed_df["ddl_command"] == "COMMENT"]
-        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
-    show_summary_df = (
-        processed_df[processed_df["ddl_command"] == "SHOW"]
-        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
-        .agg(avg_runtime=(("query_runtime"), "mean"))
-    )
+def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type: str):
+    alter_summary_df = get_all_alter_data(conn)
+    alter_summary_df["system_name"] = alter_summary_df["system_name"].str.replace("_batch|_cache", "", regex=True)
+    comment_summary_df = get_all_comment_data(conn)
+    comment_summary_df["system_name"] = comment_summary_df["system_name"].str.replace("_batch|_cache", "", regex=True)
+    show_summary_df = get_all_comment_data(conn)
+    show_summary_df["system_name"] = show_summary_df["system_name"].str.replace("_batch|_cache", "", regex=True)
 
     plot_summary(
         alter_summary_df,
@@ -871,18 +735,26 @@ def plot_003_all_alter_commet_show(data_df, y_axis_type: str):
     )
 
 
-@st.cache_data(ttl="1h")
-def plot_002_all_create_dashboard(data_df, y_axis_type: str):
-    create_df = (
-        data_df[
-            (data_df["ddl_command"] == "CREATE")
-            & (~data_df["system_name"].str.contains("batch", case=False, na=False))
-            & (~data_df["system_name"].str.contains("cache", case=False, na=False))
-        ]
-        .groupby(["system_name", "ddl_command", "granularity"], as_index=False)
-        .agg(avg_runtime=("query_runtime", "mean"))
-    )
-    create_summary_df = chunked_avg_runtime(create_df, chunk_size=50, columns=["system_name", "ddl_command"])
+def plot_002_all_create_dashboard(conn: duckdb.DuckDBPyConnection, y_axis_type: str):
+    query = f"""
+        SELECT
+            system_name,
+            ddl_command,
+            granularity,
+            AVG(query_runtime) AS avg_runtime
+        FROM {ALL_DATA_VIEW}
+        WHERE
+            ddl_command = 'CREATE'
+            AND LOWER(system_name) NOT LIKE '%batch%'
+            AND LOWER(system_name) NOT LIKE '%cache%'
+        GROUP BY
+            system_name,
+            ddl_command,
+            granularity
+        ORDER BY granularity asc;
+    """
+    create_df = conn.execute(query).fetch_df()
+    create_summary_df = chunked_avg_runtime(create_df, chunk_size=200, columns=["system_name", "ddl_command"])
 
     plot_summary(
         create_summary_df,
@@ -894,36 +766,45 @@ def plot_002_all_create_dashboard(data_df, y_axis_type: str):
     )
 
 
-@st.cache_data(ttl="1h")
-def plot_001_histo_experiment_total_runtime(data_df):
+def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
     """
     Plots the total runtime for each experiment/database as a horizontal bar chart.
 
     Args:
         data_df (pd.DataFrame): Dataframe containing the benchmark data.
-        y_axis_type (str): Type of y-axis scale (Linear or Log).
     """
     st.subheader("Total Runtime by Experiment/Database")
 
-    # Remove polaris from system names
-    data_df["system_name"] = data_df["system_name"].str.replace("_polaris", "", regex=True)
-
-    # Calculate average runtime for each unique operation to account for repetitions
-    avg_runtime_df = data_df.groupby(["system_name", "ddl_command", "granularity"], as_index=False).agg(
-        avg_runtime=("query_runtime", "mean")
-    )
-
     # Sum the average runtimes for each system to get total runtime
-    total_runtime_df = (
-        avg_runtime_df.groupby("system_name", as_index=False)
-        .agg(total_runtime=("avg_runtime", "sum"))
-        .sort_values("total_runtime", ascending=True)
-    )  # Sort for better visualization
+    query = f"""
+    WITH avg_runtime AS (
+      SELECT
+        system_name,
+        ddl_command,
+        granularity,
+        AVG(query_runtime) AS avg_runtime
+      FROM
+        {ALL_DATA_VIEW}
+      GROUP BY
+        system_name,
+        ddl_command,
+        granularity
+    )
+    SELECT
+      system_name,
+      SUM(avg_runtime) AS total_runtime
+    FROM
+      avg_runtime
+    GROUP BY
+      system_name
+    ORDER BY
+      total_runtime ASC;
 
-    total_runtime_df["total_runtime"] = (total_runtime_df["total_runtime"] / 60 / 60).round(4)
+    """
+    total_runtime_df = conn.execute(query).df()
+    total_runtime_df["total_runtime"] = total_runtime_df["total_runtime"] / 60 / 60  # Convert to hours
 
-    with st.expander("View Total Runtime Data"):
-        st.dataframe(total_runtime_df, use_container_width=True)
+    plot_dataframe(total_runtime_df, "View Raw Runtime Data")
 
     # Create horizontal bar chart
     fig = px.bar(
@@ -931,6 +812,7 @@ def plot_001_histo_experiment_total_runtime(data_df):
         y="system_name",
         x="total_runtime",
         orientation="h",
+        # log_x= True,
         labels={"system_name": "Database/Experiment", "total_runtime": "Total Runtime (hours)"},
         color="system_name",  # Color bars by system name
     )
@@ -960,9 +842,9 @@ def plot_001_histo_experiment_total_runtime(data_df):
 
 
 if __name__ == "__main__":
-    category_map = {"Standard": "data/standard/", "Opendic": "data/opendic/", "Opendic(Batch)": "data/opendic_batch/"}
-
-    if sidebar_category != "TLDR":
-        create_dashboard(category_map[sidebar_category])
-    else:
-        create_tldr_dashboard(category_map)
+    category_map = {"Standard": "data/standard/", "Opendic": "data/opendic/", "Opendic_batch": "data/opendic_batch/"}
+    with load_all_data() as conn:
+        if sidebar_category != "TLDR":
+            create_dashboard(category_map[sidebar_category], conn)
+        else:
+            create_tldr_dashboard(category_map, conn)

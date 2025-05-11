@@ -17,7 +17,7 @@ datafiles = [
     16928 * (100_000 / 16_552),  # Opendict
     1298,  # Standard
     82,  # In-mem Cache
-    552_4600 * (1298 / (1298 + 119484)),
+    int(552_4600 * (1298 / (1298 + 119484))),
     1,  # DuckDB (100% represented as 1 for visualization)
     1,  # SQLite (100% represented as 1 for visualization)
 ]
@@ -26,7 +26,7 @@ metadatafiles = [
     67995 * (100_000 / 16_552),  # Opendict
     119484,  # Standard
     361,  # In-mem Cache
-    552_4600 * (119484 / (1298 + 119484)),  # Dont know ratio. Use same distribution as standard,
+    int(552_4600 * (119484 / (1298 + 119484))),
     0,  # DuckDB (no separate metadata files mentioned)
     0,  # SQLite (no separate metadata files mentioned)
 ]
