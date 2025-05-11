@@ -18,7 +18,22 @@ st.sidebar.header("Dashboard Controls")
 sidebar_category = st.sidebar.radio("Select Dataset Category", options=["TLDR", "Standard", "Opendic", "Opendic(Batch)"])
 
 
-@st.cache_data(ttl="1h")
+@st.cache_data(ttl="6h")
+def plot_dataframe(data_df, text: str):
+    with st.expander(text):
+        mem_bytes = data_df.memory_usage(deep=True).sum()
+        mem_mb = mem_bytes / (1024**2)
+        if mem_mb > 5:
+            st.warning(f"Dataframe size is {mem_mb:.2f} MB. Showing Compacted")
+            while mem_mb > 5:
+                data_df = data_df.iloc[::2]
+                mem_bytes = data_df.memory_usage(deep=True).sum()
+                mem_mb = mem_bytes / (1024**2)
+
+        st.dataframe(data_df, use_container_width=True)
+
+
+@st.cache_data(ttl="6h")
 def load_data_standard(selected_db: str, data_dir: str, database_options):
     if selected_db != "overview":
         data_file = f"{data_dir}{selected_db}.parquet"
@@ -31,14 +46,7 @@ def load_data_standard(selected_db: str, data_dir: str, database_options):
         )
 
     # Display raw data in expandable section
-    with st.expander("View Raw Data"):
-        mem_bytes = data_df.memory_usage(deep=True).sum()
-        mem_mb = mem_bytes / (1024**2)
-        if mem_mb > 50:
-            st.warning(f"Dataframe size is {mem_mb:.2f} MB. Showing Compacted")
-            st.dataframe(data_df.iloc[::10], use_container_width=True)
-        else:
-            st.dataframe(data_df, use_container_width=True)
+    plot_dataframe(data_df, "View Raw Data")
 
     return data_df
 
@@ -482,9 +490,7 @@ def plot_summary(
         line_dash (str): Line style for the plot.
         markers (bool): Whether to show markers on the plot.
     """
-    st.subheader(f"Average Runtime for {ddl_command} Commands in {experiment_name}")
-    with st.expander("Query Data"):
-        st.dataframe(data_df, use_container_width=True)
+    plot_dataframe(data_df, "Query Data")
 
     fig = px.line(
         data_df,
@@ -535,11 +541,13 @@ def plot_summary(
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
+@st.cache_data
 def plot_create(data_df, experiment_name, y_axis_type):
     # Create visualization for CREATE commands
     st.subheader(f"Average CREATE Query Runtime by Object & Granularity for {experiment_name.capitalize()}")
-    with st.expander("Query Data"):
-        st.dataframe(data_df, use_container_width=True)
+
+    plot_dataframe(data_df, "Query Data")
+
     fig = px.line(
         data_df,
         x="granularity",
@@ -590,13 +598,14 @@ def plot_create(data_df, experiment_name, y_axis_type):
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
+@st.cache_data
 def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
     """
     Plot the average runtime for `ddl_command` commands
     """
     st.subheader(f"Average Runtime for {ddl_command} Commands in {experiment_name}")
-    with st.expander("Query Data"):
-        st.dataframe(data_df, use_container_width=True)
+
+    plot_dataframe(data_df, "Query Data")
 
     fig = px.line(
         data_df,
@@ -640,6 +649,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
+@st.cache_data
 def plot_histo(
     data_df,
     experiment_name,
@@ -663,8 +673,8 @@ def plot_histo(
         markers (bool): Whether to show markers on the plot.
     """
     st.subheader(f"Average Runtime for {ddl_command} Commands in {experiment_name}")
-    with st.expander("Query Data"):
-        st.dataframe(data_df, use_container_width=True)
+
+    plot_dataframe(data_df, "Query Data")
 
     # Combine series_column and additional_column if provided
     if additional_column:
@@ -735,8 +745,7 @@ def load_data():
         [pd.read_parquet(data_file, engine="pyarrow") for data_file in datafiles],
         ignore_index=False,
     )
-    with st.expander("View Raw Data (Partial of file size)"):
-        st.dataframe(data_df.iloc[::10], use_container_width=True)
+    plot_dataframe(data_df, "View Raw Data")
     return data_df
 
 
@@ -762,8 +771,7 @@ def plot_005_opendic_optimization_overview(data_df, y_axis_type):
 @st.cache_data
 def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
-    with st.expander("Show Raw Data"):
-        st.dataframe(data_df)
+    plot_dataframe(data_df, "Show raw data")
 
     fig_storage = px.bar(
         data_df,
