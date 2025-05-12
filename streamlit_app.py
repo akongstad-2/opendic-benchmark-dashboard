@@ -113,8 +113,7 @@ def get_all_show_data(conn):
     return result
 
 
-def get_data(conn, command, parquet_files: list[str], experiment: str):
-    conn.execute(f"CREATE VIEW if not exists data_{experiment} AS SELECT * FROM parquet_scan({parquet_files})")
+def get_data(conn, command, experiment: str):
     query: str = f"""
         SELECT
             system_name,
@@ -129,6 +128,49 @@ def get_data(conn, command, parquet_files: list[str], experiment: str):
     """
     result = conn.execute(query).fetch_df()
     return result
+
+
+def get_create_data_chunked(conn: duckdb.DuckDBPyConnection, experiment, chunk_size=50):
+    query = f"""
+    WITH avg_by_granularity AS (
+        -- First average runtimes for entries with the same granularity
+        SELECT
+            system_name,
+            ddl_command,
+            target_object,
+            granularity,
+            AVG(query_runtime) AS avg_runtime
+        FROM data_{experiment}
+        WHERE ddl_command = 'CREATE'
+        GROUP BY system_name, ddl_command, target_object, granularity
+    ),
+    chunked_data AS (
+        -- Then apply chunking to the averaged data
+        SELECT
+            system_name,
+            ddl_command,
+            target_object,
+            granularity,
+            avg_runtime,
+            CAST((ROW_NUMBER() OVER (ORDER BY system_name, ddl_command, target_object, granularity) - 1) / {chunk_size} AS INTEGER) AS chunk_id
+        FROM avg_by_granularity
+    )
+    -- Finally, average within chunks
+    SELECT
+        system_name,
+        ddl_command,
+        target_object,
+        chunk_id,
+        AVG(avg_runtime) AS avg_runtime,
+        FIRST(granularity) AS granularity
+    FROM chunked_data
+    GROUP BY system_name, ddl_command, target_object, chunk_id
+    ORDER BY chunk_id ASC, granularity ASC;
+    """
+    # s ystem_name, ddl_command, target_object, granularity
+    # GROUP BY system_name, ddl_command, target_object, chunk_id
+
+    return conn.execute(query).fetch_df()
 
 
 def plot_dataframe(data_df, text: str):
@@ -186,15 +228,14 @@ def create_dashboard(data_dir, conn):
 
 
 def standard_dashboard(conn, parquet_files: list[str], sidebar_category, selected_db):
-    # Overview dashboard
-    # Filter for 'CREATE' commands and average runtimes
-    create_df = get_data(conn, "CREATE", parquet_files, sidebar_category)
-    create_summary_df = chunked_avg_runtime(create_df, chunk_size=50)
-    alter_summary_df = get_data(conn, "ALTER", parquet_files, sidebar_category)
-    comment_summary_df = get_data(conn, "COMMENT", parquet_files, sidebar_category)
-    show_summary_df = get_data(conn, "SHOW", parquet_files, sidebar_category)
+    conn.execute(f"CREATE VIEW if not exists data_{sidebar_category} AS SELECT * FROM parquet_scan({parquet_files})")
+
+    create_summary_df = get_create_data_chunked(conn, chunk_size=50, experiment=sidebar_category)
+    alter_summary_df = get_data(conn, "ALTER", sidebar_category)
+    comment_summary_df = get_data(conn, "COMMENT", sidebar_category)
+    show_summary_df = get_data(conn, "SHOW", sidebar_category)
     # Combine all summaries
-    small_create_df = chunked_avg_runtime(create_df, chunk_size=1000)
+    small_create_df = get_create_data_chunked(conn, chunk_size=1000, experiment=sidebar_category)
     summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
@@ -216,16 +257,14 @@ def standard_dashboard(conn, parquet_files: list[str], sidebar_category, selecte
 
 
 def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_category):
-    create_summary_df = chunked_avg_runtime(
-        get_data(conn, "CREATE", parquet_files, sidebar_category),
-        chunk_size=50,
-    )
-    alter_summary_df = get_data(conn, "ALTER", parquet_files, sidebar_category)
-    comment_summary_df = get_data(conn, "COMMENT", parquet_files, sidebar_category)
-    show_summary_df = get_data(conn, "SHOW", parquet_files, sidebar_category)
+    conn.execute(f"CREATE VIEW if not exists data_{sidebar_category} AS SELECT * FROM parquet_scan({parquet_files})")
+    create_summary_df = get_create_data_chunked(conn, sidebar_category, chunk_size=50)
+    alter_summary_df = get_data(conn, "ALTER", sidebar_category)
+    comment_summary_df = get_data(conn, "COMMENT", sidebar_category)
+    show_summary_df = get_data(conn, "SHOW", sidebar_category)
 
     # Combine all summaries
-    small_create_df = chunked_avg_runtime(get_data(conn, "CREATE", parquet_files, sidebar_category), chunk_size=1000)
+    small_create_df = get_create_data_chunked(conn, sidebar_category, chunk_size=1000)
     summary_df = pd.concat([small_create_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     if sidebar_category == "Standard":
@@ -287,10 +326,11 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
 
 
 def opendic_batch(conn, parquet_files: list[str], sidebar_category, experiment_name):
-    create_summary_df = get_data(conn, "CREATE", parquet_files, sidebar_category)
-    alter_summary_df = get_data(conn, "ALTER", parquet_files, sidebar_category)
-    comment_summary_df = get_data(conn, "COMMENT", parquet_files, sidebar_category)
-    show_summary_df = get_data(conn, "SHOW", parquet_files, sidebar_category)
+    conn.execute(f"CREATE VIEW if not exists data_{sidebar_category} AS SELECT * FROM parquet_scan({parquet_files})")
+    create_summary_df = get_data(conn, "CREATE", sidebar_category)
+    alter_summary_df = get_data(conn, "ALTER", sidebar_category)
+    comment_summary_df = get_data(conn, "COMMENT", sidebar_category)
+    show_summary_df = get_data(conn, "SHOW", sidebar_category)
     summary_df = pd.concat([create_summary_df, alter_summary_df, comment_summary_df, show_summary_df])
 
     # Add y-axis type control to sidebar
@@ -342,7 +382,6 @@ def opendic_batch(conn, parquet_files: list[str], sidebar_category, experiment_n
     )
 
 
-@st.cache_data
 def chunked_avg_runtime(data_df, chunk_size=50, columns=["system_name", "ddl_command", "target_object"]):
     """
     Args:
