@@ -5,16 +5,13 @@ A dashboard for visualizing benchmark results from different databases.
 ## Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd opendic-benchmark-dashboard
-
+# Install uv
 # Create a virtual environment (optional)
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv venv
+source .venv/bin/activate
 
 # Install the package
-pip install -e .
+uv sync
 ```
 
 ## Running the Dashboard
@@ -24,26 +21,20 @@ pip install -e .
 Run the Streamlit app with:
 
 ```bash
-opendic-benchmark-streamlit
+# install taskfile
+task run
 ```
 
 Or run directly with:
 
 ```bash
-python -m streamlit run src/opendic_benchmark_dashboard/streamlit_app.py
-```
-
-### Original Plot Display
-
-You can also run the original version (which just displays a plot without interactive features):
-
-```bash
-opendic-benchmark-dashboard
+uv run python -m streamlit run streamlit_app.py
 ```
 
 ## Features
 
-- Interactive dashboard built with Streamlit
+- Sections: TLDR, Standard, Opendict, Opendict batch
+- Subsections: Sqlite, duckdb, snowflake, postgres, opendict-file, opendict-file-cache, opendict-cloud-cache, opendict-file-batch, opendict-file-cache-batch, opendict-cloud-cache-batch
 - Select and visualize benchmark data from different databases
 - Compare performance metrics across databases
 - Filter by command types and granularity
