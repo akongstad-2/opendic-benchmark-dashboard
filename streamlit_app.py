@@ -8,6 +8,19 @@ import streamlit as st
 from opendic_benchmark_dashboard import storage_data
 
 ALL_DATA_VIEW = "all_data"
+SYSTEM_ORDER = [
+    "sqlite",
+    "duckdb",
+    "snowflake",
+    "postgres",
+    "opendict_polaris_file",
+    "opendict_polaris_file_cache",
+    "opendict_polaris_file_batch",
+    "opendict_polaris_file_batch_cache",
+    "opendict_polaris_cloud_azure_cahed",
+    "opendict_polaris_cloud_azure_cached_batch",
+]
+
 
 # Set page title and layout
 st.set_page_config(page_title="OpenDIC Benchmark Dashboard", layout="wide")
@@ -442,6 +455,7 @@ def plot_summary(
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
+        category_orders={"system_name": SYSTEM_ORDER},
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
     )
 
@@ -495,6 +509,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
+        category_orders={"system_name": SYSTEM_ORDER},
         log_y=(y_axis_type == "Log"),  # Apply log scale if selected
     )
 
@@ -547,6 +562,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
         x="granularity",
         y="avg_runtime",
         color="target_object",
+        category_orders={"system_name": SYSTEM_ORDER},
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
@@ -631,6 +647,7 @@ def plot_histo(
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
+        category_orders={"system_name": SYSTEM_ORDER},
         marginal=marginal,
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
     )

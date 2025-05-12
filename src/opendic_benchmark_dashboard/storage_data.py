@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Data preparation
-db_systems = ["Opendict (No cleanup)", "Opendict", "Opendict (batched)", "Opendict (Azure)", "DuckDB", "SQLite"]
+db_systems = ["Opendict (No cleanup)", "Opendict", "Opendict (batched)", "Opendict (Azure)", "Opendict (cached)", "DuckDB", "SQLite"]
 
 # Convert all storage to GB for consistency
 storage_data = [
@@ -9,6 +9,7 @@ storage_data = [
     28.92,  # Standard: 28.92 GB
     10.08 / 1000,  # to GB
     12.8,  # cloud
+    38.55, # cache
     1.24,  # DuckDB: 1.24 GB
     0.419,  # SQLite: 0.419 GB
 ]
@@ -18,6 +19,7 @@ datafiles = [
     1298,  # Standard
     82,  # In-mem Cache
     int(552_4600 * (1298 / (1298 + 119484))),
+    1655,
     1,  # DuckDB (100% represented as 1 for visualization)
     1,  # SQLite (100% represented as 1 for visualization)
 ]
@@ -27,6 +29,7 @@ metadatafiles = [
     119484,  # Standard
     361,  # In-mem Cache
     int(552_4600 * (119484 / (1298 + 119484))),
+    120503,
     0,  # DuckDB (no separate metadata files mentioned)
     0,  # SQLite (no separate metadata files mentioned)
 ]
