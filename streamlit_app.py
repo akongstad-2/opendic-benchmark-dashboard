@@ -411,8 +411,6 @@ def chunked_avg_runtime(data_df, chunk_size=50, columns=["system_name", "ddl_com
         granularity=("granularity", lambda x: x.iloc[0]),  # Take the first granularity value from each chunk
     )
 
-
-@st.cache_data
 def plot_summary(
     data_df,
     experiment_name,
@@ -489,8 +487,6 @@ def plot_summary(
     # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
-
-@st.cache_data
 def plot_create(data_df, experiment_name, y_axis_type):
     # Create visualization for CREATE commands
     st.subheader(f"Average CREATE Query Runtime by Object & Granularity for {experiment_name.capitalize()}")
@@ -548,7 +544,6 @@ def plot_create(data_df, experiment_name, y_axis_type):
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
-@st.cache_data
 def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
     """
     Plot the average runtime for `ddl_command` commands
@@ -599,8 +594,6 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
     # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
-
-@st.cache_data
 def plot_histo(
     data_df,
     experiment_name,
