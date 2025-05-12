@@ -10,14 +10,14 @@ from opendic_benchmark_dashboard import storage_data
 ALL_DATA_VIEW = "all_data"
 SYSTEM_ORDER = [
     "sqlite",
-    "duckdb",
+    "duckDB",
     "snowflake",
     "postgres",
     "opendict_polaris_file",
     "opendict_polaris_file_cache",
     "opendict_polaris_file_batch",
-    "opendict_polaris_file_batch_cache",
-    "opendict_polaris_cloud_azure_cahed",
+    "opendict_polaris_file_cache_batch",
+    "opendict_polaris_cloud_azure_cached",
     "opendict_polaris_cloud_azure_cached_batch",
 ]
 
@@ -79,6 +79,8 @@ def get_all_alter_data(conn):
         AVG(query_runtime) as avg_runtime
     FROM {ALL_DATA_VIEW}
     WHERE ddl_command = 'ALTER'
+        AND LOWER(system_name) NOT LIKE '%batch%'
+        AND LOWER(system_name) NOT LIKE '%cache%'
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
@@ -98,6 +100,8 @@ def get_all_comment_data(conn):
         AVG(query_runtime) as avg_runtime
     FROM {ALL_DATA_VIEW}
     WHERE ddl_command = 'COMMENT'
+        AND LOWER(system_name) NOT LIKE '%batch%'
+        AND LOWER(system_name) NOT LIKE '%cache%'
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
@@ -117,6 +121,8 @@ def get_all_show_data(conn):
         AVG(query_runtime) as avg_runtime
     FROM {ALL_DATA_VIEW}
     WHERE ddl_command = 'SHOW'
+        AND LOWER(system_name) NOT LIKE '%batch%'
+        AND LOWER(system_name) NOT LIKE '%cache%'
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
@@ -411,6 +417,7 @@ def chunked_avg_runtime(data_df, chunk_size=50, columns=["system_name", "ddl_com
         granularity=("granularity", lambda x: x.iloc[0]),  # Take the first granularity value from each chunk
     )
 
+
 def plot_summary(
     data_df,
     experiment_name,
@@ -487,6 +494,7 @@ def plot_summary(
     # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
+
 def plot_create(data_df, experiment_name, y_axis_type):
     # Create visualization for CREATE commands
     st.subheader(f"Average CREATE Query Runtime by Object & Granularity for {experiment_name.capitalize()}")
@@ -497,7 +505,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
         data_df,
         x="granularity",
         y="avg_runtime",
-        color="target_object",
+        color="system_name",
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
@@ -556,7 +564,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
         data_df,
         x="granularity",
         y="avg_runtime",
-        color="target_object",
+        color="system_name",
         category_orders={"system_name": SYSTEM_ORDER},
         labels={
             "target_object": "Target Object",
@@ -593,6 +601,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
 
     # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
+
 
 def plot_histo(
     data_df,
@@ -750,11 +759,8 @@ def plot_004_storage(data_df, y_axis_type: str):
 
 def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type: str):
     alter_summary_df = get_all_alter_data(conn)
-    alter_summary_df["system_name"] = alter_summary_df["system_name"].str.replace("_batch|_cache", "", regex=True)
     comment_summary_df = get_all_comment_data(conn)
-    comment_summary_df["system_name"] = comment_summary_df["system_name"].str.replace("_batch|_cache", "", regex=True)
-    show_summary_df = get_all_comment_data(conn)
-    show_summary_df["system_name"] = show_summary_df["system_name"].str.replace("_batch|_cache", "", regex=True)
+    show_summary_df = get_all_show_data(conn)
 
     plot_summary(
         alter_summary_df,
