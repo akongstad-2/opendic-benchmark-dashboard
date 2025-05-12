@@ -20,6 +20,18 @@ SYSTEM_ORDER = [
     "opendict_polaris_cloud_azure_cached",
     "opendict_polaris_cloud_azure_cached_batch",
 ]
+OPENDICT_LABELS = {
+    "sqlite": "sqlite",
+    "duckDB": "duckdb",
+    "snowflake": "snowflake",
+    "postgres": "postgres",
+    "opendict_polaris_file": "opendict (local)",
+    "opendict_polaris_file_cache": "opendict (local, cache)",
+    "opendict_polaris_file_batch": "opendict (local, batch)",
+    "opendict_polaris_file_cache_batch": "opendict (local, cache, batch)",
+    "opendict_polaris_cloud_azure_cached": "opendict (cloud, cache)",
+    "opendict_polaris_cloud_azure_cached_batch": "opendict (cloud, cache, batch)",
+}
 
 
 # Set page title and layout
@@ -311,6 +323,8 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         series_column="system_name",
         legend_title="ALTER: System, Object Type",
         line_dash="target_object",
+        log_x=True,
+        symbol="system_name",
     )
 
     plot_summary(
@@ -321,6 +335,8 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         series_column="system_name",
         legend_title="COMMENT: System, Object Type",
         line_dash="target_object",
+        log_x=True,
+        symbol="system_name",
     )
 
     plot_summary(
@@ -331,6 +347,8 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         series_column="system_name",
         legend_title="SHOW: System, Object Type",
         line_dash="target_object",
+        log_x=True,
+        symbol="system_name",
     )
     plot_summary(
         summary_df,
@@ -429,6 +447,7 @@ def plot_summary(
     line_dash=None,
     markers: bool = False,
     symbol=None,
+    log_x=False,
 ):
     """
     Args:
@@ -462,6 +481,7 @@ def plot_summary(
         },
         category_orders={"system_name": SYSTEM_ORDER},
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
+        log_x=(y_axis_type == "Log") if log_x else False,
     )
 
     fig.update_layout(
@@ -513,6 +533,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
+        line_dash="target_object",
         category_orders={"system_name": SYSTEM_ORDER},
         log_y=(y_axis_type == "Log"),  # Apply log scale if selected
     )
@@ -572,8 +593,12 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
             "granularity": "Granularity",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
-        },
+        }
+        | OPENDICT_LABELS,
+        line_dash="target_object",
         log_y=(y_axis_type == "Log"),  # Apply log scale if selectedm
+        log_x=(y_axis_type == "Log"),  # Apply log scale if selected
+        symbol="system_name",
     )
 
     fig.update_layout(
@@ -648,7 +673,8 @@ def plot_histo(
             "granularity": "Granularity",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
-        },
+        }
+        | OPENDICT_LABELS,
         category_orders={"system_name": SYSTEM_ORDER},
         marginal=marginal,
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
@@ -721,7 +747,8 @@ def plot_004_storage(data_df, y_axis_type: str):
             "Storage Usage (GB)": "Storage Usage (GB)",
             "Metadatafiles Count": "Metadatafiles",
             "Datafiles Count": "Datafiles",
-        },
+        }
+        | OPENDICT_LABELS,
         hover_data={
             "Database System": True,
             "Storage Usage (GB)": True,
@@ -769,6 +796,8 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="System Name",
+        log_x=True,
+        symbol="system_name",
     )
 
     plot_summary(
@@ -778,6 +807,8 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="System Name",
+        log_x=True,
+        symbol="system_name",
     )
 
     plot_summary(
@@ -787,6 +818,8 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
         y_axis_type=y_axis_type,
         series_column="system_name",
         legend_title="System Name",
+        log_x=True,
+        symbol="system_name",
     )
 
 
@@ -871,11 +904,13 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         labels={"system_name": "Database/Experiment", "total_runtime": "Total Runtime (hours)"},
         color="system_name",  # Color bars by system name
     )
+    tick_vals = list(OPENDICT_LABELS.keys())
+    tick_text = list(OPENDICT_LABELS.values())
 
     fig.update_layout(
-        template="plotly_white",
-        showlegend=False,  # No need for legend as y-axis shows the system names
+        showlegend=False,
         xaxis=dict(title="Total Runtime (hours)"),
+        yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text),
     )
 
     # Add SVG export capability
