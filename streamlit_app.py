@@ -757,15 +757,16 @@ def plot_004_storage(data_df, y_axis_type: str):
         },
     )
     fig_storage.update_layout(
-        xaxis_title="System",
+        xaxis_title="",
         yaxis_title="Storage Usage (GB)",
-        legend=dict(
-            orientation="h",
-            x=0.5,  # horizontal center
-            xanchor="center",
-            y=1.0,  # just above the plotting area
-            yanchor="bottom",
-        ),
+        showlegend=False,
+        # legend=dict(
+        #     orientation="h",
+        #     x=0.5,  # horizontal center
+        #     xanchor="center",
+        #     y=1.0,  # just above the plotting area
+        #     yanchor="bottom",
+        # ),
     )
     # Add a config to enable SVG export via the modebar
     config = {
@@ -910,7 +911,9 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
     fig.update_layout(
         showlegend=False,
         xaxis=dict(title="Total Runtime (hours)"),
+        # yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text, showticklabels=False ),
         yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text),
+        yaxis_title=""
     )
 
     # Add SVG export capability
