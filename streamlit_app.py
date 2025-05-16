@@ -2,6 +2,7 @@ import os
 
 import duckdb
 import pandas as pd
+import plotly.colors as pc
 import plotly.express as px
 import streamlit as st
 
@@ -20,6 +21,25 @@ SYSTEM_ORDER = [
     "opendict_polaris_cloud_azure_cached",
     "opendict_polaris_cloud_azure_cached_batch",
 ]
+SYSTEM_LABEL_ORDER = [
+    "sqlite",
+    "duckdb",
+    "snowflake",
+    "postgres",
+    "opendict (local)",
+    "opendict (local, cache)",
+    "opendict (local, batch)",
+    "opendict (local, cache, batch)",
+    "opendict (cloud, cache)",
+    "opendict (cloud, cache, batch)",
+]
+
+st_colors = pc.qualitative.Plotly
+
+SYSTEM_LABEL_COLOR_MAP = {
+    label: st_colors[i % len(st_colors)] for i, label in enumerate(SYSTEM_LABEL_ORDER)
+}
+
 OPENDICT_LABELS = {
     "sqlite": "sqlite",
     "duckDB": "duckdb",
@@ -311,7 +331,7 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         ddl_command="CREATE",
         experiment_name="All standard datasystems",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="CREATE: System, Object Type",
         line_dash="target_object",
     )
@@ -320,7 +340,7 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         ddl_command="ALTER",
         experiment_name="All standard datasystems",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="ALTER: System, Object Type",
         line_dash="target_object",
         log_x=True,
@@ -332,7 +352,7 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         ddl_command="COMMENT",
         experiment_name="All standard datasystems",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="COMMENT: System, Object Type",
         line_dash="target_object",
         log_x=True,
@@ -344,7 +364,7 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         ddl_command="SHOW",
         experiment_name="All standard datasystems",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="SHOW: System, Object Type",
         line_dash="target_object",
         log_x=True,
@@ -355,7 +375,7 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         ddl_command="ALL",
         experiment_name="All standard datasystems",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="System, Object Type",
         line_dash="ddl_command",
         legend_orientation="v",
@@ -464,6 +484,8 @@ def plot_summary(
 
     plot_dataframe(data_df, "Query Data")
 
+    data_df["system_label"] = data_df["system_name"].map(OPENDICT_LABELS)
+
     fig = px.line(
         data_df,
         x="granularity",
@@ -479,7 +501,8 @@ def plot_summary(
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
-        category_orders={"system_name": SYSTEM_ORDER},
+        color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
+        category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
         log_x=(y_axis_type == "Log") if log_x else False,
     )
@@ -521,6 +544,8 @@ def plot_create(data_df, experiment_name, y_axis_type):
 
     plot_dataframe(data_df, "Query Data")
 
+    data_df["system_label"] = data_df["system_name"].map(OPENDICT_LABELS)
+
     fig = px.line(
         data_df,
         x="granularity",
@@ -534,6 +559,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
             "system_name": "System Name",
         },
         line_dash="target_object",
+        color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_name": SYSTEM_ORDER},
         log_y=(y_axis_type == "Log"),  # Apply log scale if selected
     )
@@ -581,20 +607,22 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
 
     plot_dataframe(data_df, "Query Data")
 
+    data_df["system_label"] = data_df["system_name"].map(OPENDICT_LABELS)
+
     fig = px.line(
         data_df,
         x="granularity",
         y="avg_runtime",
         color="system_name",
-        category_orders={"system_name": SYSTEM_ORDER},
+        color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
+        category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
             "granularity": "Granularity",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
-        }
-        | OPENDICT_LABELS,
+        },
         line_dash="target_object",
         log_y=(y_axis_type == "Log"),  # Apply log scale if selectedm
         log_x=(y_axis_type == "Log"),  # Apply log scale if selected
@@ -654,6 +682,8 @@ def plot_histo(
 
     plot_dataframe(data_df, "Query Data")
 
+    data_df["system_label"] = data_df["system_name"].map(OPENDICT_LABELS)
+
     # Combine series_column and additional_column if provided
     if additional_column:
         data_df["combined_series"] = data_df[series_column] + " | " + data_df[additional_column]
@@ -673,9 +703,9 @@ def plot_histo(
             "granularity": "Granularity",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
-        }
-        | OPENDICT_LABELS,
-        category_orders={"system_name": SYSTEM_ORDER},
+        },
+        color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
+        category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
         marginal=marginal,
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
     )
@@ -731,31 +761,37 @@ def plot_005_opendic_optimization_overview(data_df, y_axis_type):
         st.dataframe(data_df)
 
 
+
+
 def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
     plot_dataframe(data_df, "Show raw data")
 
+    DISPLAY_ORDER = ["sqlite", "duckdb", "postgres", "opendict (local)", "opendict (cloud)", "opendict (cloud)"]
+
     fig_storage = px.bar(
         data_df,
-        x="Database System",
+        x="system_label",
         y="Storage Usage (GB)",
-        color="Database System",
+        color="system_label",
         title="Storage Usage by Datasystem System (GB)",
         log_y=(y_axis_type == "Log"),
         labels={
-            "Database System": "Data System",
+            "system_label": "Data System",
             "Storage Usage (GB)": "Storage Usage (GB)",
             "Metadatafiles Count": "Metadatafiles",
             "Datafiles Count": "Datafiles",
-        }
-        | OPENDICT_LABELS,
+        },
         hover_data={
-            "Database System": True,
+            "system_label": True,
             "Storage Usage (GB)": True,
             "Metadatafiles Count": True,
             "Datafiles Count": True,
         },
+        color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
+        category_orders={"system_label": DISPLAY_ORDER},
     )
+
     fig_storage.update_layout(
         xaxis_title="",
         yaxis_title="Storage Usage (GB)",
@@ -795,10 +831,10 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
         ddl_command="ALTER",
         experiment_name="ALL",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="System Name",
         log_x=True,
-        symbol="system_name",
+        symbol="system_label",
     )
 
     plot_summary(
@@ -806,10 +842,10 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
         ddl_command="COMMENT",
         experiment_name="ALL",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="System Name",
         log_x=True,
-        symbol="system_name",
+        symbol="system_label",
     )
 
     plot_summary(
@@ -817,10 +853,10 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
         ddl_command="SHOW",
         experiment_name="ALL",
         y_axis_type=y_axis_type,
-        series_column="system_name",
+        series_column="system_label",
         legend_title="System Name",
         log_x=True,
-        symbol="system_name",
+        symbol="system_label",
     )
 
 
@@ -833,9 +869,10 @@ def plot_002_all_create_dashboard(conn: duckdb.DuckDBPyConnection, y_axis_type: 
             AVG(query_runtime) AS avg_runtime
         FROM {ALL_DATA_VIEW}
         WHERE
-            ddl_command = 'CREATE'
+        ddl_command    = 'CREATE'
             AND LOWER(system_name) NOT LIKE '%batch%'
-            AND LOWER(system_name) NOT LIKE '%cache%'
+            AND LOWER(system_name) NOT LIKE 'opendict_polaris_file'
+            AND LOWER(system_name) NOT LIKE 'opendict_polaris_cloud%'
         GROUP BY
             system_name,
             ddl_command,
@@ -850,8 +887,7 @@ def plot_002_all_create_dashboard(conn: duckdb.DuckDBPyConnection, y_axis_type: 
         ddl_command="CREATE",
         experiment_name="ALL",
         y_axis_type=y_axis_type,
-        series_column="system_name",
-        legend_title="System Name",
+        series_column="system_label",
     )
 
 
@@ -904,6 +940,8 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         # log_x= True,
         labels={"system_name": "Database/Experiment", "total_runtime": "Total Runtime (hours)"},
         color="system_name",  # Color bars by system name
+        color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
+        category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
     )
     tick_vals = list(OPENDICT_LABELS.keys())
     tick_text = list(OPENDICT_LABELS.values())
@@ -913,7 +951,7 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         xaxis=dict(title="Total Runtime (hours)"),
         # yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text, showticklabels=False ),
         yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text),
-        yaxis_title=""
+        yaxis_title="",
     )
 
     # Add SVG export capability

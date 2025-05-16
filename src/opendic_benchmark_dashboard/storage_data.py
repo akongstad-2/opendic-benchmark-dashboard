@@ -4,7 +4,7 @@ import pandas as pd
 db_systems = [
     # "opendict (no cleanup)",
     "opendict (local)",
-    "opendict (local, batched)",
+    "opendict (local, batch)",
     "opendict (cloud)",
     # "opendict (local, cached)",
     "duckdb",
@@ -49,7 +49,7 @@ metadatafiles = [
 # Create a DataFrame for easier manipulation
 df_storage = pd.DataFrame(
     {
-        "Database System": db_systems,
+        "system_label": db_systems,
         "Storage Usage (GB)": storage_data,
         "Datafiles Count": datafiles,
         "Metadatafiles Count": metadatafiles,
