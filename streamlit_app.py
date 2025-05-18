@@ -34,12 +34,6 @@ SYSTEM_LABEL_ORDER = [
     "opendict (cloud, cache, batch)",
 ]
 
-st_colors = pc.qualitative.Plotly
-
-SYSTEM_LABEL_COLOR_MAP = {
-    label: st_colors[i % len(st_colors)] for i, label in enumerate(SYSTEM_LABEL_ORDER)
-}
-
 OPENDICT_LABELS = {
     "sqlite": "sqlite",
     "duckDB": "duckdb",
@@ -52,6 +46,15 @@ OPENDICT_LABELS = {
     "opendict_polaris_cloud_azure_cached": "opendict (cloud, cache)",
     "opendict_polaris_cloud_azure_cached_batch": "opendict (cloud, cache, batch)",
 }
+
+st_colors = pc.qualitative.Plotly
+
+SYSTEM_LABEL_COLOR_MAP = {label: st_colors[i % len(st_colors)] for i, label in enumerate(SYSTEM_LABEL_ORDER)}
+
+# Add "opendict (cloud)" with the same color as "opendict (cloud, cache)"
+# For the storage diagram
+cloud_cache_index = SYSTEM_LABEL_ORDER.index("opendict (cloud, cache)")
+SYSTEM_LABEL_COLOR_MAP["opendict (cloud)"] = st_colors[cloud_cache_index % len(st_colors)]
 
 
 # Set page title and layout
@@ -112,7 +115,8 @@ def get_all_alter_data(conn):
     FROM {ALL_DATA_VIEW}
     WHERE ddl_command = 'ALTER'
         AND LOWER(system_name) NOT LIKE '%batch%'
-        AND LOWER(system_name) NOT LIKE '%cache%'
+        AND LOWER(system_name) NOT LIKE 'opendict_polaris_file'
+        -- AND LOWER(system_name) NOT LIKE 'opendict_polaris_cloud%'
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
@@ -133,7 +137,8 @@ def get_all_comment_data(conn):
     FROM {ALL_DATA_VIEW}
     WHERE ddl_command = 'COMMENT'
         AND LOWER(system_name) NOT LIKE '%batch%'
-        AND LOWER(system_name) NOT LIKE '%cache%'
+        AND LOWER(system_name) NOT LIKE 'opendict_polaris_file'
+        -- AND LOWER(system_name) NOT LIKE 'opendict_polaris_cloud%'
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
@@ -153,8 +158,9 @@ def get_all_show_data(conn):
         AVG(query_runtime) as avg_runtime
     FROM {ALL_DATA_VIEW}
     WHERE ddl_command = 'SHOW'
-        AND LOWER(system_name) NOT LIKE '%batch%'
-        AND LOWER(system_name) NOT LIKE '%cache%'
+    AND LOWER(system_name) NOT LIKE '%batch%'
+    AND LOWER(system_name) NOT LIKE 'opendict_polaris_file'
+    -- AND LOWER(system_name) NOT LIKE 'opendict_polaris_cloud%'
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
@@ -461,6 +467,7 @@ def plot_summary(
     experiment_name,
     ddl_command,
     y_axis_type,
+    y="avg_runtime",
     series_column="ddl_command",
     legend_title="DDL Command",
     legend_orientation="h",
@@ -489,7 +496,7 @@ def plot_summary(
     fig = px.line(
         data_df,
         x="granularity",
-        y="avg_runtime",
+        y=y,
         color=series_column,
         line_dash=line_dash,
         markers=markers,
@@ -500,6 +507,7 @@ def plot_summary(
             "granularity": "Granularity",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
+            "cumulative_runtime": "Cumulative Runtime",
         },
         color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
@@ -751,16 +759,89 @@ def create_tldr_dashboard(category_map: dict[str, str], conn: duckdb.DuckDBPyCon
     plot_002_all_create_dashboard(conn, y_axis_type=y_axis_type)
     plot_004_storage(data_df=storage_data.df_storage, y_axis_type=y_axis_type)
     plot_003_all_alter_commet_show(conn=conn, y_axis_type=y_axis_type)
+    # plot_005_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
 
 
-def plot_005_opendic_optimization_overview(data_df, y_axis_type):
-    # Remove polaris from system names
-    data_df["system_name"] = data_df["system_name"].str.replace("_polaris", "", regex=True)
+# def plot_005_opendic_optimization_overview(conn, y_axis_type):
+#     opendic_batch_create_query = f"""
+#         WITH avg_by_granularity AS (
+#             -- First average runtimes for entries with the same granularity
+#             SELECT
+#                 system_name,
+#                 ddl_command,
+#                 granularity,
+#                 AVG(query_runtime) AS avg_runtime
+#             FROM {ALL_DATA_VIEW}
+#             WHERE ddl_command = 'CREATE'
+#                 AND LOWER(system_name) LIKE '%batch%'
+#             GROUP BY system_name, ddl_command, granularity
+#         )
+#         -- Calculate cumulative sum of averages
+#         SELECT
+#             system_name,
+#             ddl_command,
+#             granularity,
+#             SUM(ANY_VALUE(avg_runtime)) OVER (PARTITION BY system_name, ddl_command ORDER BY granularity) as cumulative_runtime
+#         FROM avg_by_granularity
+#         GROUP BY system_name, ddl_command, granularity
+#         ORDER BY granularity ASC;
+#         """
 
-    with st.expander("Show Raw Data"):
-        st.dataframe(data_df)
+#     chunk_size = 50
+#     opendic_create_query = f"""
+#     WITH avg_by_granularity AS (
+#         -- First average runtimes for entries with the same granularity
+#         SELECT
+#             system_name,
+#             ddl_command,
+#             granularity,
+#             AVG(query_runtime) AS avg_runtime
+#         FROM {ALL_DATA_VIEW}
+#         WHERE ddl_command = 'CREATE'
+#             AND LOWER(system_name) LIKE 'opendict%'
+#             AND LOWER(system_name) NOT LIKE '%batch'
+#         GROUP BY system_name, ddl_command, granularity
+#     ),
+#     chunked_data AS (
+#         -- Then apply chunking to the averaged data
+#         SELECT
+#             system_name,
+#             ddl_command,
+#             granularity,
+#             avg_runtime,
+#             CAST((ROW_NUMBER() OVER (ORDER BY system_name, ddl_command, granularity) - 1) / {chunk_size} AS INTEGER) AS chunk_id
+#         FROM avg_by_granularity
+#     )
+#     -- Calculate cumulative runtime by chunk
+#     SELECT
+#         system_name,
+#         ddl_command,
+#         chunk_id,
+#         SUM(ANY_VALUE(avg_runtime)) OVER (PARTITION BY system_name, ddl_command ORDER BY chunk_id) AS cumulative_runtime,
+#         FIRST(granularity) AS granularity
+#     FROM chunked_data
+#     GROUP BY system_name, ddl_command, chunk_id
+#     ORDER BY chunk_id ASC;
+#     """
 
+#     opendic_create_df = conn.execute(opendic_create_query).fetch_df()
+#     opendic_batch_create_df = conn.execute(opendic_batch_create_query).fetch_df()
 
+#     # Rename the runtime column to have consistent column names
+#     opendic_create_df = opendic_create_df.rename(columns={"cumulative_runtime": "cumulative_runtime"})
+#     opendic_batch_create_df = opendic_batch_create_df.rename(columns={"cumulative_runtime": "cumulative_runtime"})
+
+#     create_df = pd.concat([opendic_create_df, opendic_batch_create_df])
+
+#     plot_summary(
+#         create_df,
+#         ddl_command="CREATE",
+#         experiment_name="CUMULATIVE",
+#         y_axis_type=y_axis_type,
+#         series_column="system_label",
+#         y="cumulative_runtime",  # Specify the new column to use for y-axis
+#         log_x=y_axis_type == "Log",
+#     )
 
 
 def plot_004_storage(data_df, y_axis_type: str):
@@ -861,29 +942,48 @@ def plot_003_all_alter_commet_show(conn: duckdb.DuckDBPyConnection, y_axis_type:
 
 
 def plot_002_all_create_dashboard(conn: duckdb.DuckDBPyConnection, y_axis_type: str):
+    chunk_size = 50
     query = f"""
+    WITH avg_by_granularity AS (
+        -- First average runtimes for entries with the same granularity
         SELECT
             system_name,
             ddl_command,
             granularity,
             AVG(query_runtime) AS avg_runtime
         FROM {ALL_DATA_VIEW}
-        WHERE
-        ddl_command    = 'CREATE'
+        WHERE ddl_command = 'CREATE'
             AND LOWER(system_name) NOT LIKE '%batch%'
             AND LOWER(system_name) NOT LIKE 'opendict_polaris_file'
-            AND LOWER(system_name) NOT LIKE 'opendict_polaris_cloud%'
-        GROUP BY
+            -- AND LOWER(system_name) NOT LIKE 'opendict_polaris_cloud%'
+        GROUP BY system_name, ddl_command, granularity
+    ),
+    chunked_data AS (
+        -- Then apply chunking to the averaged data
+        SELECT
             system_name,
             ddl_command,
-            granularity
-        ORDER BY granularity asc;
+            granularity,
+            avg_runtime,
+            CAST((ROW_NUMBER() OVER (ORDER BY system_name, ddl_command, granularity) - 1) / {chunk_size} AS INTEGER) AS chunk_id
+        FROM avg_by_granularity
+    )
+    -- Finally, average within chunks
+    SELECT
+        system_name,
+        ddl_command,
+        chunk_id,
+        AVG(avg_runtime) AS avg_runtime,
+        FIRST(granularity) AS granularity
+    FROM chunked_data
+    GROUP BY system_name, ddl_command, chunk_id
+    ORDER BY chunk_id ASC, granularity ASC;
     """
+
     create_df = conn.execute(query).fetch_df()
-    create_summary_df = chunked_avg_runtime(create_df, chunk_size=200, columns=["system_name", "ddl_command"])
 
     plot_summary(
-        create_summary_df,
+        create_df,
         ddl_command="CREATE",
         experiment_name="ALL",
         y_axis_type=y_axis_type,
@@ -931,26 +1031,28 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
 
     plot_dataframe(total_runtime_df, "View Raw Runtime Data")
 
+    total_runtime_df["system_label"] = total_runtime_df["system_name"].map(OPENDICT_LABELS)
+
     # Create horizontal bar chart
     fig = px.bar(
         total_runtime_df,
-        y="system_name",
+        y="system_label",
         x="total_runtime",
         orientation="h",
         # log_x= True,
         labels={"system_name": "Database/Experiment", "total_runtime": "Total Runtime (hours)"},
-        color="system_name",  # Color bars by system name
+        color="system_label",  # Color bars by system name
         color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
     )
-    tick_vals = list(OPENDICT_LABELS.keys())
-    tick_text = list(OPENDICT_LABELS.values())
+    # tick_vals = list(OPENDICT_LABELS.keys())
+    # tick_text = list(OPENDICT_LABELS.values())
 
     fig.update_layout(
         showlegend=False,
         xaxis=dict(title="Total Runtime (hours)"),
         # yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text, showticklabels=False ),
-        yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text),
+        # yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text),
         yaxis_title="",
     )
 
