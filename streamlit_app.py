@@ -8,6 +8,7 @@ import streamlit as st
 
 from opendic_benchmark_dashboard import storage_data
 
+LEGEND_FONT_SIZE = 18
 ALL_DATA_VIEW = "all_data"
 SYSTEM_ORDER = [
     "sqlite",
@@ -309,7 +310,6 @@ def standard_dashboard(conn, parquet_files: list[str], sidebar_category, selecte
         y_axis_type=y_axis_type,
         series_column="ddl_command",
         line_dash="target_object",
-        legend_orientation="v",
     )
 
 
@@ -384,7 +384,6 @@ def standard_compare_all_dashboard(conn, parquet_files: list[str], sidebar_categ
         series_column="system_label",
         legend_title="System, Object Type",
         line_dash="ddl_command",
-        legend_orientation="v",
     )
 
 
@@ -523,6 +522,7 @@ def plot_summary(
             orientation=legend_orientation,
             xanchor="center",  # anchor at center
             yanchor="bottom",  # anchor on bottom of text
+            font=dict(size=LEGEND_FONT_SIZE),
             x=0.5,  # horizontal center
             y=1.0,  # just above the plotting area
         )
@@ -588,6 +588,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
             yanchor="bottom",  # anchor on bottom of text
             x=0.5,  # horizontal center
             y=1.0,  # just above the plotting area
+            font=dict(size=LEGEND_FONT_SIZE),
         ),
     )
     # Add a config to enable SVG export via the modebar
@@ -644,6 +645,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
             yanchor="bottom",  # anchor on bottom of text
             x=0.5,  # horizontal center
             y=1.0,  # just above the plotting area
+            font=dict(size=LEGEND_FONT_SIZE),
         ),
     )
 
@@ -729,9 +731,7 @@ def plot_histo(
             xanchor="center",
             y=1.0,  # just above the plotting area
             yanchor="bottom",
-            font=dict(
-                size=9  # Adjust this value to your preference (smaller number = smaller text)
-            ),
+            font=dict(size=LEGEND_FONT_SIZE),
         ),
     )
 
@@ -760,6 +760,56 @@ def create_tldr_dashboard(category_map: dict[str, str], conn: duckdb.DuckDBPyCon
     plot_004_storage(data_df=storage_data.df_storage, y_axis_type=y_axis_type)
     plot_003_all_alter_commet_show(conn=conn, y_axis_type=y_axis_type)
     # plot_005_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
+    plot_006_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
+
+
+def plot_006_opendic_optimization_overview(conn, y_axis_type):
+    chunk_size = 50
+    query = f"""
+    WITH avg_by_granularity AS (
+        -- First average runtimes for entries with the same granularity
+        SELECT
+            system_name,
+            ddl_command,
+            granularity,
+            AVG(query_runtime) AS avg_runtime
+        FROM {ALL_DATA_VIEW}
+        WHERE ddl_command = 'CREATE'
+            AND LOWER(system_name) LIKE 'opendict%'
+            AND LOWER(system_name) NOT LIKE '%batch%'
+            AND LOWER(system_name) NOT LIKE '%cloud%'
+        GROUP BY system_name, ddl_command, granularity
+    ),
+    chunked_data AS (
+        -- Then apply chunking to the averaged data
+        SELECT
+            system_name,
+            ddl_command,
+            granularity,
+            avg_runtime,
+            CAST((ROW_NUMBER() OVER (ORDER BY system_name, ddl_command, granularity) - 1) / {chunk_size} AS INTEGER) AS chunk_id
+        FROM avg_by_granularity
+    )
+    -- Finally, average within chunks
+    SELECT
+        system_name,
+        ddl_command,
+        chunk_id,
+        AVG(avg_runtime) AS avg_runtime,
+        FIRST(granularity) AS granularity
+    FROM chunked_data
+    GROUP BY system_name, ddl_command, chunk_id
+    ORDER BY chunk_id ASC, granularity ASC;
+    """
+    create_df = conn.execute(query).fetch_df()
+
+    plot_summary(
+        create_df,
+        ddl_command="CREATE",
+        experiment_name="CUMULATIVE",
+        y_axis_type=y_axis_type,
+        series_column="system_label",
+    )
 
 
 # def plot_005_opendic_optimization_overview(conn, y_axis_type):
