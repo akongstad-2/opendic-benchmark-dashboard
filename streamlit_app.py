@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.colors as pc
 import plotly.express as px
 import streamlit as st
+from pandas.core.common import np
 
 from opendic_benchmark_dashboard import storage_data
 
@@ -41,21 +42,36 @@ OPENDICT_LABELS = {
     "snowflake": "snowflake",
     "postgres": "postgres",
     "opendict_polaris_file": "opendict (local)",
-    "opendict_polaris_file_cache": "opendict (local, cache)",
     "opendict_polaris_file_batch": "opendict (local, batch)",
+    "opendict_polaris_file_cache": "opendict (local, cache)",
     "opendict_polaris_file_cache_batch": "opendict (local, cache, batch)",
     "opendict_polaris_cloud_azure_cached": "opendict (cloud, cache)",
     "opendict_polaris_cloud_azure_cached_batch": "opendict (cloud, cache, batch)",
 }
 
+# Reverse mapping to get full label list
+SYSTEM_LABEL_ORDER = list(OPENDICT_LABELS.values())
+n_opendict_variants = 6
+narrow_range = np.linspace(0.8, 0.3, n_opendict_variants)
+# Base color shades (e.g., blue)
+opendict_color_shades = pc.sample_colorscale("blues", narrow_range, colortype="rgb")
+
+# Build color map
+SYSTEM_LABEL_COLOR_MAP = {}
+
+# Assign default Plotly colors to non-opendict systems
+non_opendict_labels = [label for label in SYSTEM_LABEL_ORDER if not label.startswith("opendict")]
 st_colors = pc.qualitative.Plotly
+for i, label in enumerate(non_opendict_labels):
+    SYSTEM_LABEL_COLOR_MAP[label] = st_colors[i % len(st_colors)]
 
-SYSTEM_LABEL_COLOR_MAP = {label: st_colors[i % len(st_colors)] for i, label in enumerate(SYSTEM_LABEL_ORDER)}
+# Assign shades of blue to opendict systems
+opendict_labels = [label for label in SYSTEM_LABEL_ORDER if label.startswith("opendict")]
+for i, label in enumerate(opendict_labels):
+    SYSTEM_LABEL_COLOR_MAP[label] = opendict_color_shades[i % len(opendict_color_shades)]
 
-# Add "opendict (cloud)" with the same color as "opendict (cloud, cache)"
-# For the storage diagram
-cloud_cache_index = SYSTEM_LABEL_ORDER.index("opendict (cloud, cache)")
-SYSTEM_LABEL_COLOR_MAP["opendict (cloud)"] = st_colors[cloud_cache_index % len(st_colors)]
+# Add "opendict (cloud)" with same color as "opendict (cloud, cache)"
+SYSTEM_LABEL_COLOR_MAP["opendict (cloud)"] = SYSTEM_LABEL_COLOR_MAP["opendict (cloud, cache)"]
 
 
 # Set page title and layout
@@ -503,7 +519,7 @@ def plot_summary(
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
-            "granularity": "Granularity",
+            "granularity": "Objects in Metastore",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
             "cumulative_runtime": "Cumulative Runtime",
@@ -513,6 +529,8 @@ def plot_summary(
         log_y=(y_axis_type == "Log"),  # Apply log scale to y-axis if selected
         log_x=(y_axis_type == "Log") if log_x else False,
     )
+
+    fig.update_traces(marker=dict(size=10))
 
     fig.update_layout(
         legend_title=legend_title,
@@ -548,7 +566,7 @@ def plot_summary(
 
 def plot_create(data_df, experiment_name, y_axis_type):
     # Create visualization for CREATE commands
-    st.subheader(f"Average CREATE Query Runtime by Object & Granularity for {experiment_name.capitalize()}")
+    st.subheader(f"Average CREATE Query Runtime by Object & Objects in Metastore for {experiment_name.capitalize()}")
 
     plot_dataframe(data_df, "Query Data")
 
@@ -562,7 +580,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
-            "granularity": "Granularity",
+            "granularity": "Objects in Metastore",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
@@ -628,7 +646,7 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
-            "granularity": "Granularity",
+            "granularity": "Objects in Metastore",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
@@ -710,7 +728,7 @@ def plot_histo(
         labels={
             "target_object": "Target Object",
             "avg_runtime": "Avg. Runtime (s)",
-            "granularity": "Granularity",
+            "granularity": "Objects in Metastore",
             "ddl_command": "DDL Command",
             "system_name": "System Name",
         },
@@ -921,6 +939,13 @@ def plot_004_storage(data_df, y_axis_type: str):
         },
         color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_label": DISPLAY_ORDER},
+        text="Storage Usage (GB)",
+    )
+
+    fig_storage.update_traces(
+        texttemplate="%{text:.2f} GB.",  # format the label
+        textposition="auto",  # keep labels inside the bars
+        cliponaxis=True,  # disable clipping so labels stay on zoom
     )
 
     fig_storage.update_layout(
@@ -1094,6 +1119,7 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         color="system_label",  # Color bars by system name
         color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
+        text="total_runtime",  # specify the column to show as labels
     )
     # tick_vals = list(OPENDICT_LABELS.keys())
     # tick_text = list(OPENDICT_LABELS.values())
@@ -1104,6 +1130,13 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         # yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text, showticklabels=False ),
         # yaxis=dict(tickmode="array", tickvals=tick_vals, ticktext=tick_text),
         yaxis_title="",
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.3f} h.",  # format the label
+        textposition="auto",  # keep labels inside the bars
+        cliponaxis=True,  # disable clipping so labels stay on zoom
+        insidetextanchor="start",  # Anchors the text well within the bar
     )
 
     # Add SVG export capability
