@@ -776,9 +776,80 @@ def create_tldr_dashboard(category_map: dict[str, str], conn: duckdb.DuckDBPyCon
     plot_001_histo_experiment_total_runtime(conn)
     plot_002_all_create_dashboard(conn, y_axis_type=y_axis_type)
     plot_004_storage(data_df=storage_data.df_storage, y_axis_type=y_axis_type)
+    plot_007_table_maintenance_comparison(data_df=storage_data.df_storage_maintenance, y_axis_type=y_axis_type)
     plot_003_all_alter_commet_show(conn=conn, y_axis_type=y_axis_type)
     # plot_005_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
     plot_006_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
+
+
+def plot_007_table_maintenance_comparison(data_df, y_axis_type):
+    plot_dataframe(data_df, "Show raw data")
+
+    DISPLAY_ORDER = [
+        "opendict (no-maintenance)",
+        "opendict (snapshot-expiry)",
+        "opendict (snapshot-expiry, metadata-cleanup)",
+        "opendict batch (snapshot-expiry)",
+        "opendict batch (snapshot-expiry, metadata-cleanup)",
+    ]
+
+    fig_storage = px.bar(
+        data_df,
+        x="system_label",
+        y="Storage Usage (GB)",
+        color="system_label",
+        title="Storage Usage w/ table maintenance strategies",
+        log_y=(y_axis_type == "Log"),
+        labels={
+            "system_label": "Data System",
+            "Storage Usage (GB)": "Storage Usage (GB)",
+            "Metadatafiles Count": "Metadatafiles",
+            "Datafiles Count": "Datafiles",
+        },
+        hover_data={
+            "system_label": True,
+            "Storage Usage (GB)": True,
+            "Metadatafiles Count": True,
+            "Datafiles Count": True,
+        },
+        # color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
+        category_orders={"system_label": DISPLAY_ORDER},
+        text="Storage Usage (GB)",
+    )
+
+    fig_storage.update_traces(
+        texttemplate="%{text:.3f} GB.",  # format the label
+        textposition="auto",  # keep labels inside the bars
+        cliponaxis=True,  # disable clipping so labels stay on zoom
+    )
+
+    fig_storage.update_layout(
+        xaxis_title="",
+        yaxis_title="Storage Usage (GB)",
+        showlegend=False,
+        # legend=dict(
+        #     orientation="h",
+        #     x=0.5,  # horizontal center
+        #     xanchor="center",
+        #     y=1.0,  # just above the plotting area
+        #     yanchor="bottom",
+        # ),
+    )
+    # Add a config to enable SVG export via the modebar
+    config = {
+        "toImageButtonOptions": {
+            "format": "svg",  # Default to svg format
+            "filename": "total_runtime_chart",
+            # "height": 500,
+            # "width": 1000,
+            "scale": 1,
+        },
+        "displaylogo": False,
+        "modeBarButtonsToAdd": ["downloadSVG"],
+    }
+
+    # Display the chart with export configuration
+    st.plotly_chart(fig_storage, use_container_width=True, config=config)
 
 
 def plot_006_opendic_optimization_overview(conn, y_axis_type):

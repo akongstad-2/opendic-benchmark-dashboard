@@ -55,3 +55,46 @@ df_storage = pd.DataFrame(
         "Metadatafiles Count": metadatafiles,
     }
 )
+
+maintenance_labels = [
+    "opendict (no-maintenance)",
+    "opendict (snapshot-expiry)",
+    "opendict (snapshot-expiry, metadata-cleanup)",
+    "opendict batch (snapshot-expiry)",
+    "opendict batch (snapshot-expiry, metadata-cleanup)",
+]
+# Convert all storage to GB for consistency
+maintenance_storage_data = [
+    105.39 * (100_000 / 16_552),  # no-maintenance: 105.39 GB
+    28.92,  # (snapshot-expiry)
+    143.3 / 1000,  # (snapshot-expiry, metadata-cleanup)
+    13.5 / 1000,  # to GB. Batch. snapshot-expiry
+    13.5 / 1000,  # to GB. (snapshot-expiry, metadata-cleanup)
+]
+
+maintenance_datafiles = [
+    16928 * (100_000 / 16_552),  # no-maintenance
+    1298,  # (snapshot-expiry)
+    -1, # (snapshot-expiry, metadata-cleanup)
+    82,  # batch. (snapshot-expiry)
+    82,  # batch. (snapshot-expiry, snapshot-expiry, metadata-cleanup))
+    # 1655,
+]
+
+maintenance_metadatafiles = [
+    -1,  # Opendict
+    119484,  # (snapshot-expiry)
+    4826 ,    # (snapshot-expiry, metadata-cleanup)
+    361,  # # batch. (snapshot-expiry)
+    334,  # (snapshot-expiry, snapshot-expiry, metadata-cleanup),
+]
+
+
+df_storage_maintenance = pd.DataFrame(
+    {
+        "system_label": maintenance_labels,
+        "Storage Usage (GB)": maintenance_storage_data,
+        "Datafiles Count": maintenance_datafiles,
+        "Metadatafiles Count": maintenance_metadatafiles,
+    }
+)
