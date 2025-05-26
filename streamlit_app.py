@@ -780,6 +780,24 @@ def create_tldr_dashboard(category_map: dict[str, str], conn: duckdb.DuckDBPyCon
     plot_003_all_alter_commet_show(conn=conn, y_axis_type=y_axis_type)
     # plot_005_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
     plot_006_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
+    plot_008_outlier_table(conn)
+
+
+def plot_008_outlier_table(conn):
+    query = f"""
+    SELECT
+        system_name,
+        ddl_command,
+        granularity,
+        AVG(query_runtime) AS avg_runtime
+    FROM {ALL_DATA_VIEW}
+    GROUP BY system_name, ddl_command, granularity
+    ORDER BY avg_runtime desc
+    LIMIT 10000"""
+
+    df = conn.execute(query).fetch_df()
+
+    plot_dataframe(df, "Show outlier data")
 
 
 def plot_007_table_maintenance_comparison(data_df, y_axis_type):
@@ -821,6 +839,7 @@ def plot_007_table_maintenance_comparison(data_df, y_axis_type):
         texttemplate="%{text:.3f} GB.",  # format the label
         textposition="auto",  # keep labels inside the bars
         cliponaxis=True,  # disable clipping so labels stay on zoom
+        insidetextanchor="start",  # Anchors the text well within the bar
     )
 
     fig_storage.update_layout(
@@ -839,7 +858,6 @@ def plot_007_table_maintenance_comparison(data_df, y_axis_type):
     config = {
         "toImageButtonOptions": {
             "format": "svg",  # Default to svg format
-            "filename": "total_runtime_chart",
             # "height": 500,
             # "width": 1000,
             "scale": 1,
@@ -987,14 +1005,14 @@ def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
     plot_dataframe(data_df, "Show raw data")
 
-    DISPLAY_ORDER = ["sqlite", "duckdb", "postgres", "opendict (local)", "opendict (cloud)", "opendict (cloud)"]
+    DISPLAY_ORDER = ["sqlite", "duckdb", "postgres", "opendict (local)", "opendict (local, batch)"]
 
     fig_storage = px.bar(
         data_df,
         x="system_label",
         y="Storage Usage (GB)",
         color="system_label",
-        title="Storage Usage by Datasystem System (GB)",
+        # title="Storage Usage by Datasystem System (GB)",
         log_y=(y_axis_type == "Log"),
         labels={
             "system_label": "Data System",
@@ -1174,6 +1192,9 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
     """
     total_runtime_df = conn.execute(query).df()
     total_runtime_df["total_runtime"] = total_runtime_df["total_runtime"] / 60 / 60  # Convert to hours
+    total_runtime_df["label_runtime"] = total_runtime_df["total_runtime"].apply(
+        lambda h: f"{h * 60:,.2f} min." if h < 1 else f"{h:,.1f} hours."
+    )
 
     plot_dataframe(total_runtime_df, "View Raw Runtime Data")
 
@@ -1190,7 +1211,7 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         color="system_label",  # Color bars by system name
         color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_name": SYSTEM_ORDER, "system_label": SYSTEM_LABEL_ORDER},
-        text="total_runtime",  # specify the column to show as labels
+        text="label_runtime",  # specify the column to show as labels
     )
     # tick_vals = list(OPENDICT_LABELS.keys())
     # tick_text = list(OPENDICT_LABELS.values())
@@ -1204,7 +1225,7 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
     )
 
     fig.update_traces(
-        texttemplate="%{text:.3f} h.",  # format the label
+        # texttemplate="%{text:.3f} h.",  # format the label
         textposition="auto",  # keep labels inside the bars
         cliponaxis=True,  # disable clipping so labels stay on zoom
         insidetextanchor="start",  # Anchors the text well within the bar

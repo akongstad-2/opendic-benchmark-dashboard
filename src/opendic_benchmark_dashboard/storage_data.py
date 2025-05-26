@@ -5,7 +5,7 @@ db_systems = [
     # "opendict (no cleanup)",
     "opendict (local)",
     "opendict (local, batch)",
-    "opendict (cloud)",
+    # "opendict (cloud)",
     # "opendict (local, cached)",
     "duckdb",
     "sqlite",
@@ -15,20 +15,20 @@ db_systems = [
 # Convert all storage to GB for consistency
 storage_data = [
     # 105.39 * (100_000 / 16_552),  # Opendict: 105.39 GB
-    28.92,  # Standard: 28.92 GB
+    114 / 1000,  # Standard: 28.92 GB
     10.08 / 1000,  # to GB
-    12.8,  # cloud
+    # 12.8,  # cloud
     # 38.55,  # cache
-    1.24,  # DuckDB: 1.24 GB
+    1.24,  # DuckDB: 1.24 GB tables. (28,1 MB) functions
     0.419,  # SQLite: 0.419 GB
-    3.54,
+    3.54 - (39.9 / 1000),  # table.  function 446,4 - 39,9 = 406,5mb.
 ]
 
 datafiles = [
     # 16928 * (100_000 / 16_552),  # Opendict
     1298,  # Standard
     82,  # In-mem Cache
-    int(552_4600 * (1298 / (1298 + 119484))),
+    # int(552_4600 * (1298 / (1298 + 119484))),
     # 1655,
     1,  # DuckDB (100% represented as 1 for visualization)
     1,  # SQLite (100% represented as 1 for visualization)
@@ -37,9 +37,9 @@ datafiles = [
 
 metadatafiles = [
     # 67995 * (100_000 / 16_552),  # Opendict
-    119484,  # Standard
+    3925,  # Standard
     361,  # In-mem Cache
-    int(552_4600 * (119484 / (1298 + 119484))),
+    # int(552_4600 * (119484 / (1298 + 119484))),
     # 120503,
     0,  # DuckDB (no separate metadata files mentioned)
     0,  # SQLite (no separate metadata files mentioned)
@@ -75,7 +75,7 @@ maintenance_storage_data = [
 maintenance_datafiles = [
     16928 * (100_000 / 16_552),  # no-maintenance
     1298,  # (snapshot-expiry)
-    -1, # (snapshot-expiry, metadata-cleanup)
+    1298,  # (snapshot-expiry, metadata-cleanup)
     82,  # batch. (snapshot-expiry)
     82,  # batch. (snapshot-expiry, snapshot-expiry, metadata-cleanup))
     # 1655,
@@ -84,8 +84,8 @@ maintenance_datafiles = [
 maintenance_metadatafiles = [
     -1,  # Opendict
     119484,  # (snapshot-expiry)
-    4826 ,    # (snapshot-expiry, metadata-cleanup)
-    361,  # # batch. (snapshot-expiry)
+    3925,  # (snapshot-expiry, metadata-cleanup)
+    361,  # batch. (snapshot-expiry)
     334,  # (snapshot-expiry, snapshot-expiry, metadata-cleanup),
 ]
 
