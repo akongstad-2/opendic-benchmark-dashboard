@@ -53,10 +53,8 @@ OPENDICT_LABELS = {
 SYSTEM_LABEL_ORDER = list(OPENDICT_LABELS.values())
 n_opendict_variants = 6
 narrow_range = np.linspace(0.8, 0.3, n_opendict_variants)
-# Base color shades (e.g., blue)
 opendict_color_shades = pc.sample_colorscale("blues", narrow_range, colortype="rgb")
 
-# Build color map
 SYSTEM_LABEL_COLOR_MAP = {}
 
 # Assign default Plotly colors to non-opendict systems
@@ -74,10 +72,7 @@ for i, label in enumerate(opendict_labels):
 SYSTEM_LABEL_COLOR_MAP["opendict (cloud)"] = SYSTEM_LABEL_COLOR_MAP["opendict (cloud, cache)"]
 
 
-# Set page title and layout
 st.set_page_config(page_title="OpenDIC Benchmark Dashboard", layout="wide")
-
-# Add title and description
 st.title("OpenDIC Benchmark Dashboard")
 st.write("Visualize and compare benchmark results for different databases")
 
@@ -87,7 +82,6 @@ sidebar_category = st.sidebar.radio("Select Dataset Category", options=["TLDR", 
 
 
 def load_all_data():
-    # Initialize DuckDB connection
     conn = duckdb.connect(database=":memory:")
 
     # Create a list of all parquet files
@@ -115,8 +109,6 @@ def get_all_create_data(conn):
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
-
-    # Execute query and return as pandas DataFrame
     result = conn.execute(query).fetch_df()
     return result
 
@@ -137,8 +129,6 @@ def get_all_alter_data(conn):
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
-
-    # Execute query and return as pandas DataFrame
     result = conn.execute(query).fetch_df()
     return result
 
@@ -159,8 +149,6 @@ def get_all_comment_data(conn):
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
-
-    # Execute query and return as pandas DataFrame
     result = conn.execute(query).fetch_df()
     return result
 
@@ -181,8 +169,6 @@ def get_all_show_data(conn):
     GROUP BY system_name, ddl_command, granularity
     ORDER BY granularity asc;
     """
-
-    # Execute query and return as pandas DataFrame
     result = conn.execute(query).fetch_df()
     return result
 
@@ -207,7 +193,7 @@ def get_data(conn, command, experiment: str):
 def get_create_data_chunked(conn: duckdb.DuckDBPyConnection, experiment, chunk_size=50):
     query = f"""
     WITH avg_by_granularity AS (
-        -- First average runtimes for entries with the same granularity
+        -- average runtimes for entries with the same granularity
         SELECT
             system_name,
             ddl_command,
@@ -219,7 +205,7 @@ def get_create_data_chunked(conn: duckdb.DuckDBPyConnection, experiment, chunk_s
         GROUP BY system_name, ddl_command, target_object, granularity
     ),
     chunked_data AS (
-        -- Then apply chunking to the averaged data
+        -- apply chunking to the averaged data
         SELECT
             system_name,
             ddl_command,
@@ -229,7 +215,7 @@ def get_create_data_chunked(conn: duckdb.DuckDBPyConnection, experiment, chunk_s
             CAST((ROW_NUMBER() OVER (ORDER BY system_name, ddl_command, target_object, granularity) - 1) / {chunk_size} AS INTEGER) AS chunk_id
         FROM avg_by_granularity
     )
-    -- Finally, average within chunks
+    -- average within chunks
     SELECT
         system_name,
         ddl_command,
@@ -241,9 +227,6 @@ def get_create_data_chunked(conn: duckdb.DuckDBPyConnection, experiment, chunk_s
     GROUP BY system_name, ddl_command, target_object, chunk_id
     ORDER BY chunk_id ASC, granularity ASC;
     """
-    # s ystem_name, ddl_command, target_object, granularity
-    # GROUP BY system_name, ddl_command, target_object, chunk_id
-
     return conn.execute(query).fetch_df()
 
 
@@ -465,7 +448,6 @@ def chunked_avg_runtime(data_df, chunk_size=50, columns=["system_name", "ddl_com
     Args:
         columns: List of columns to group by for computing chunked averages.
     """
-    # Create chunked averages (each row represents the average of 20 rows)
     # assign chunk IDs to each row
     create_summary = data_df.reset_index(drop=True)
     create_summary["chunk_id"] = create_summary.index // chunk_size
@@ -473,7 +455,7 @@ def chunked_avg_runtime(data_df, chunk_size=50, columns=["system_name", "ddl_com
     # group by these chunk IDs and compute the average for each chunk
     return create_summary.groupby(columns + ["chunk_id"], as_index=False).agg(
         avg_runtime=("avg_runtime", "mean"),
-        granularity=("granularity", lambda x: x.iloc[0]),  # Take the first granularity value from each chunk
+        granularity=("granularity", lambda x: x.iloc[0]),
     )
 
 
@@ -547,7 +529,7 @@ def plot_summary(
         if legend_orientation == "h"
         else None,
     )
-    # Add a config to enable SVG export via the modebar
+    # config to enable SVG export
     config = {
         "toImageButtonOptions": {
             "format": "svg",  # Default to svg format
@@ -565,7 +547,6 @@ def plot_summary(
 
 
 def plot_create(data_df, experiment_name, y_axis_type):
-    # Create visualization for CREATE commands
     st.subheader(f"Average CREATE Query Runtime by Object & Objects in Metastore for {experiment_name.capitalize()}")
 
     plot_dataframe(data_df, "Query Data")
@@ -587,7 +568,7 @@ def plot_create(data_df, experiment_name, y_axis_type):
         line_dash="target_object",
         color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_name": SYSTEM_ORDER},
-        log_y=(y_axis_type == "Log"),  # Apply log scale if selected
+        log_y=(y_axis_type == "Log"),
     )
 
     fig.update_layout(
@@ -602,10 +583,10 @@ def plot_create(data_df, experiment_name, y_axis_type):
         ),
         legend=dict(
             orientation="h",
-            xanchor="center",  # anchor at center
-            yanchor="bottom",  # anchor on bottom of text
-            x=0.5,  # horizontal center
-            y=1.0,  # just above the plotting area
+            xanchor="center",
+            yanchor="bottom",
+            x=0.5,
+            y=1.0,
             font=dict(size=LEGEND_FONT_SIZE),
         ),
     )
@@ -621,8 +602,6 @@ def plot_create(data_df, experiment_name, y_axis_type):
         "displaylogo": False,
         "modeBarButtonsToAdd": ["downloadSVG"],
     }
-
-    # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
@@ -651,36 +630,30 @@ def plot_ddl(data_df, ddl_command, experiment_name, y_axis_type):
             "system_name": "System Name",
         },
         line_dash="target_object",
-        log_y=(y_axis_type == "Log"),  # Apply log scale if selectedm
-        log_x=(y_axis_type == "Log"),  # Apply log scale if selected
+        log_y=(y_axis_type == "Log"),
+        log_x=(y_axis_type == "Log"),
         symbol="system_name",
     )
 
     fig.update_layout(
         legend=dict(
             orientation="h",
-            xanchor="center",  # anchor at center
-            yanchor="bottom",  # anchor on bottom of text
+            xanchor="center",
+            yanchor="bottom",
             x=0.5,  # horizontal center
             y=1.0,  # just above the plotting area
             font=dict(size=LEGEND_FONT_SIZE),
         ),
     )
-
-    # Add a config to enable SVG export via the modebar
     config = {
         "toImageButtonOptions": {
-            "format": "svg",  # Default to svg format
+            "format": "svg",
             "filename": "total_runtime_chart",
-            # "height": 500,
-            # "width": 1000,
             "scale": 1,
         },
         "displaylogo": False,
         "modeBarButtonsToAdd": ["downloadSVG"],
     }
-
-    # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
@@ -690,7 +663,7 @@ def plot_histo(
     ddl_command,
     y_axis_type,
     series_column="ddl_command",
-    additional_column=None,  # New argument for an additional column
+    additional_column=None,
     legend_title="DDL Command",
     marginal=None,
     bar_mode="group",
@@ -752,8 +725,6 @@ def plot_histo(
             font=dict(size=LEGEND_FONT_SIZE),
         ),
     )
-
-    # Add a config to enable SVG export via the modebar
     config = {
         "toImageButtonOptions": {
             "format": "svg",  # Default to svg format
@@ -766,7 +737,6 @@ def plot_histo(
         "modeBarButtonsToAdd": ["downloadSVG"],
     }
 
-    # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 
@@ -778,7 +748,6 @@ def create_tldr_dashboard(category_map: dict[str, str], conn: duckdb.DuckDBPyCon
     plot_004_storage(data_df=storage_data.df_storage, y_axis_type=y_axis_type)
     plot_007_table_maintenance_comparison(data_df=storage_data.df_storage_maintenance, y_axis_type=y_axis_type)
     plot_003_all_alter_commet_show(conn=conn, y_axis_type=y_axis_type)
-    # plot_005_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
     plot_006_opendic_optimization_overview(conn=conn, y_axis_type=y_axis_type)
     plot_008_outlier_table(conn)
 
@@ -830,7 +799,6 @@ def plot_007_table_maintenance_comparison(data_df, y_axis_type):
             "Metadatafiles Count": True,
             "Datafiles Count": True,
         },
-        # color_discrete_map=SYSTEM_LABEL_COLOR_MAP,
         category_orders={"system_label": DISPLAY_ORDER},
         text="Storage Usage (GB)",
     )
@@ -846,13 +814,6 @@ def plot_007_table_maintenance_comparison(data_df, y_axis_type):
         xaxis_title="",
         yaxis_title="Storage Usage (GB)",
         showlegend=False,
-        # legend=dict(
-        #     orientation="h",
-        #     x=0.5,  # horizontal center
-        #     xanchor="center",
-        #     y=1.0,  # just above the plotting area
-        #     yanchor="bottom",
-        # ),
     )
     # Add a config to enable SVG export via the modebar
     config = {
@@ -919,88 +880,6 @@ def plot_006_opendic_optimization_overview(conn, y_axis_type):
     )
 
 
-# def plot_005_opendic_optimization_overview(conn, y_axis_type):
-#     opendic_batch_create_query = f"""
-#         WITH avg_by_granularity AS (
-#             -- First average runtimes for entries with the same granularity
-#             SELECT
-#                 system_name,
-#                 ddl_command,
-#                 granularity,
-#                 AVG(query_runtime) AS avg_runtime
-#             FROM {ALL_DATA_VIEW}
-#             WHERE ddl_command = 'CREATE'
-#                 AND LOWER(system_name) LIKE '%batch%'
-#             GROUP BY system_name, ddl_command, granularity
-#         )
-#         -- Calculate cumulative sum of averages
-#         SELECT
-#             system_name,
-#             ddl_command,
-#             granularity,
-#             SUM(ANY_VALUE(avg_runtime)) OVER (PARTITION BY system_name, ddl_command ORDER BY granularity) as cumulative_runtime
-#         FROM avg_by_granularity
-#         GROUP BY system_name, ddl_command, granularity
-#         ORDER BY granularity ASC;
-#         """
-
-#     chunk_size = 50
-#     opendic_create_query = f"""
-#     WITH avg_by_granularity AS (
-#         -- First average runtimes for entries with the same granularity
-#         SELECT
-#             system_name,
-#             ddl_command,
-#             granularity,
-#             AVG(query_runtime) AS avg_runtime
-#         FROM {ALL_DATA_VIEW}
-#         WHERE ddl_command = 'CREATE'
-#             AND LOWER(system_name) LIKE 'opendict%'
-#             AND LOWER(system_name) NOT LIKE '%batch'
-#         GROUP BY system_name, ddl_command, granularity
-#     ),
-#     chunked_data AS (
-#         -- Then apply chunking to the averaged data
-#         SELECT
-#             system_name,
-#             ddl_command,
-#             granularity,
-#             avg_runtime,
-#             CAST((ROW_NUMBER() OVER (ORDER BY system_name, ddl_command, granularity) - 1) / {chunk_size} AS INTEGER) AS chunk_id
-#         FROM avg_by_granularity
-#     )
-#     -- Calculate cumulative runtime by chunk
-#     SELECT
-#         system_name,
-#         ddl_command,
-#         chunk_id,
-#         SUM(ANY_VALUE(avg_runtime)) OVER (PARTITION BY system_name, ddl_command ORDER BY chunk_id) AS cumulative_runtime,
-#         FIRST(granularity) AS granularity
-#     FROM chunked_data
-#     GROUP BY system_name, ddl_command, chunk_id
-#     ORDER BY chunk_id ASC;
-#     """
-
-#     opendic_create_df = conn.execute(opendic_create_query).fetch_df()
-#     opendic_batch_create_df = conn.execute(opendic_batch_create_query).fetch_df()
-
-#     # Rename the runtime column to have consistent column names
-#     opendic_create_df = opendic_create_df.rename(columns={"cumulative_runtime": "cumulative_runtime"})
-#     opendic_batch_create_df = opendic_batch_create_df.rename(columns={"cumulative_runtime": "cumulative_runtime"})
-
-#     create_df = pd.concat([opendic_create_df, opendic_batch_create_df])
-
-#     plot_summary(
-#         create_df,
-#         ddl_command="CREATE",
-#         experiment_name="CUMULATIVE",
-#         y_axis_type=y_axis_type,
-#         series_column="system_label",
-#         y="cumulative_runtime",  # Specify the new column to use for y-axis
-#         log_x=y_axis_type == "Log",
-#     )
-
-
 def plot_004_storage(data_df, y_axis_type: str):
     # Display the raw data
     plot_dataframe(data_df, "Show raw data")
@@ -1041,13 +920,6 @@ def plot_004_storage(data_df, y_axis_type: str):
         xaxis_title="",
         yaxis_title="Storage Usage (GB)",
         showlegend=False,
-        # legend=dict(
-        #     orientation="h",
-        #     x=0.5,  # horizontal center
-        #     xanchor="center",
-        #     y=1.0,  # just above the plotting area
-        #     yanchor="bottom",
-        # ),
     )
     # Add a config to enable SVG export via the modebar
     config = {
@@ -1062,7 +934,6 @@ def plot_004_storage(data_df, y_axis_type: str):
         "modeBarButtonsToAdd": ["downloadSVG"],
     }
 
-    # Display the chart with export configuration
     st.plotly_chart(fig_storage, use_container_width=True, config=config)
 
 
@@ -1230,9 +1101,6 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         cliponaxis=True,  # disable clipping so labels stay on zoom
         insidetextanchor="start",  # Anchors the text well within the bar
     )
-
-    # Add SVG export capability
-    # Add a config to enable SVG export via the modebar
     config = {
         "toImageButtonOptions": {
             "format": "svg",  # Default to svg format
@@ -1244,8 +1112,6 @@ def plot_001_histo_experiment_total_runtime(conn: duckdb.DuckDBPyConnection):
         "displaylogo": False,
         "modeBarButtonsToAdd": ["downloadSVG"],
     }
-
-    # Display the chart with export configuration
     st.plotly_chart(fig, use_container_width=True, config=config)
 
 

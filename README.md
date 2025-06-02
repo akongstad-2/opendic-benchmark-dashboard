@@ -1,6 +1,21 @@
-# OpenDIC Benchmark Dashboard
+# OpenDict Benchmark Dashboard
+
+This dashboard was developed at ITU as part of a the Master thesis: _OpenDict: An Approach to Open Management of All Metadata Objects_.
+
+**Purpose**: The main purpose of the dashboard is to visualize the results our metadata operation performance experiment.
+
+**Authors**: Andreas Kongstad & Carl Bruun
+
+![alt text](<assets/Screenshot 2025-06-02 at 03.01.38.png>)
 
 A dashboard for visualizing benchmark results from different databases.
+
+## Overview
+
+- **results**: Parquet files containing exported benchmark results.  
+- **src/storage_data.py**: Storage results from the performance experiment.  
+- **streamlit_app.py**: Code for the Streamlit app that creates the dashboard.  
+- **taskfile.toml**: Task definitions.
 
 ## Installation
 
@@ -35,7 +50,3 @@ uv run python -m streamlit run streamlit_app.py
 
 - Sections: TLDR, Standard, Opendict, Opendict batch
 - Subsections: Sqlite, duckdb, snowflake, postgres, opendict-file, opendict-file-cache, opendict-cloud-cache, opendict-file-batch, opendict-file-cache-batch, opendict-cloud-cache-batch
-- Select and visualize benchmark data from different databases
-- Compare performance metrics across databases
-- Filter by command types and granularity
-- View raw data and statistics
